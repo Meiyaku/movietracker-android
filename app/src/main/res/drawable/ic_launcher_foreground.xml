@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Safe zone: 18–90 on each axis (72×72dp centred in 108×108dp canvas).
+    Letters span y=25–83 (58dp tall), centred horizontally in the safe zone.
+
+    M (AuthBackground #475D92) — x=19–58, built from 4 parallelograms:
+      • left bar       — vertical rect
+      • left arm       — diagonal parallelogram, V-bottom at x=35–42, y=60
+      • right arm      — mirror diagonal parallelogram
+      • right bar      — vertical rect
+
+    L (AuthButton #7D5260) — x=62–89, built from 2 rects:
+      • vertical bar
+      • horizontal bar at bottom
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- M — AuthBackground #475D92 -->
+    <!-- Left vertical bar -->
+    <path
+        android:fillColor="#FF475D92"
+        android:pathData="M19,83 L19,25 L26,25 L26,83 Z"/>
+    <!-- Left diagonal arm (parallelogram: top x=19–26, V-bottom x=35–42 y=60) -->
+    <path
+        android:fillColor="#FF475D92"
+        android:pathData="M19,25 L26,25 L42,60 L35,60 Z"/>
+    <!-- Right diagonal arm (mirror of left arm) -->
+    <path
+        android:fillColor="#FF475D92"
+        android:pathData="M35,60 L42,60 L58,25 L51,25 Z"/>
+    <!-- Right vertical bar -->
+    <path
+        android:fillColor="#FF475D92"
+        android:pathData="M51,83 L51,25 L58,25 L58,83 Z"/>
+
+    <!-- L — AuthButton #7D5260 -->
+    <!-- Vertical bar -->
+    <path
+        android:fillColor="#FF7D5260"
+        android:pathData="M62,25 L62,83 L69,83 L69,25 Z"/>
+    <!-- Horizontal bar -->
+    <path
+        android:fillColor="#FF7D5260"
+        android:pathData="M62,76 L62,83 L89,83 L89,76 Z"/>
+
+</vector>

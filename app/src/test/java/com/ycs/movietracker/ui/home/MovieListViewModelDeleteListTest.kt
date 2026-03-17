@@ -1,0 +1,238 @@
+package com.ycs.movietracker.ui.home
+
+import com.ycs.movietracker.data.model.Movie
+import com.ycs.movietracker.data.model.MovieList
+import com.ycs.movietracker.data.repository.MovieListRepository
+import com.ycs.movietracker.data.repository.MovieRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+
+/**
+ * Unit tests for [MovieListViewModel.deleteList] — companion test story US-009-T.
+ * Parent story: US-009 (Delete a custom list).
+ *
+ * Covers: repository delegation order, active list fallback on deletion,
+ * failure handling (removeListFromMovies and deleteList), success state.
+ *
+ * Run with: ./gradlew test
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class MovieListViewModelDeleteListTest {
+
+    private val testDispatcher = UnconfinedTestDispatcher()
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(testDispatcher)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
+
+    // ── Helpers ─────────────────────────────────────────────────────────────
+
+    private class FakeListRepo(
+        private val initialLists: List<MovieList> = emptyList(),
+        private val deleteResult: Result<Unit> = Result.success(Unit)
+    ) : MovieListRepository {
+        var deleteCallCount = 0
+
+        override fun getLists(uid: String): Flow<List<MovieList>> = flowOf(initialLists)
+        override suspend fun createList(uid: String, list: MovieList): Result<String> =
+            Result.success("id")
+        override suspend fun updateList(uid: String, list: MovieList): Result<Unit> =
+            Result.success(Unit)
+        override suspend fun deleteList(uid: String, listId: String): Result<Unit> {
+            deleteCallCount++
+            return deleteResult
+        }
+    }
+
+    private class FakeMovieRepo(
+        private val removeResult: Result<Unit> = Result.success(Unit)
+    ) : MovieRepository {
+        var removeCallCount = 0
+
+        override fun getMoviesForList(uid: String, listId: String): Flow<List<Movie>> = emptyFlow()
+        override suspend fun addMovie(uid: String, movie: Movie): Result<String> =
+            Result.success("id")
+        override suspend fun updateMovie(uid: String, movie: Movie): Result<Unit> =
+            Result.success(Unit)
+        override suspend fun deleteMovie(uid: String, movieId: String): Result<Unit> =
+            Result.success(Unit)
+        override suspend fun removeListFromMovies(uid: String, listId: String): Result<Unit> {
+            removeCallCount++
+            return removeResult
+        }
+    }
+
+    private val myMovies = MovieList(id = "1", name = "My Movies")
+    private val action   = MovieList(id = "2", name = "Action")
+    private val sciFi    = MovieList(id = "3", name = "Sci-Fi")
+
+    private fun makeVm(
+        initialLists: List<MovieList> = listOf(myMovies, action, sciFi),
+        removeResult: Result<Unit> = Result.success(Unit),
+        deleteResult: Result<Unit> = Result.success(Unit)
+    ): Triple<MovieListViewModel, FakeListRepo, FakeMovieRepo> {
+        val listRepo = FakeListRepo(initialLists, deleteResult)
+        val movieRepo = FakeMovieRepo(removeResult)
+        val vm = MovieListViewModel(listRepo, movieRepo)
+        return Triple(vm, listRepo, movieRepo)
+    }
+
+    // ── repository delegation ─────────────────────────────────────────────────
+
+    @Test
+    fun deleteList_callsRemoveListFromMovies() = runTest {
+        val (vm, _, movieRepo) = makeVm()
+        vm.loadLists("uid")
+        vm.deleteList(action, "uid")
+        assertEquals(1, movieRepo.removeCallCount)
+    }
+
+    @Test
+    fun deleteList_callsDeleteListAfterRemoveSucceeds() = runTest {
+        val (vm, listRepo, _) = makeVm()
+        vm.loadLists("uid")
+        vm.deleteList(action, "uid")
+        assertEquals(1, listRepo.deleteCallCount)
+    }
+
+    @Test
+    fun deleteList_doesNotCallDeleteListWhenRemoveFails() = runTest {
+        val (vm, listRepo, _) = makeVm(
+            removeResult = Result.failure(RuntimeException("remove failed"))
+        )
+        vm.loadLists("uid")
+        vm.deleteList(action, "uid")
+        assertEquals(0, listRepo.deleteCallCount)
+    }
+
+    // ── success path ──────────────────────────────────────────────────────────
+
+    @Test
+    fun deleteList_success_setsDeleteListSuccess() = runTest {
+        val (vm, _, _) = makeVm()
+        vm.loadLists("uid")
+        vm.deleteList(action, "uid")
+        assertTrue(vm.deleteListSuccess.value)
+    }
+
+    @Test
+    fun deleteList_success_isDeletingListFalseAfterCompletion() = runTest {
+        val (vm, _, _) = makeVm()
+        vm.loadLists("uid")
+        vm.deleteList(action, "uid")
+        assertFalse(vm.isDeletingList.value)
+    }
+
+    @Test
+    fun deleteList_success_switchesToMyMoviesWhenActiveListDeleted() = runTest {
+        val (vm, _, _) = makeVm()
+        vm.loadLists("uid")
+        vm.selectList(action)
+        vm.deleteList(action, "uid")
+        assertEquals("My Movies", vm.activeList.value?.name)
+    }
+
+    @Test
+    fun deleteList_success_switchesToFirstRemainingListWhenNoMyMoviesAndActiveDeleted() = runTest {
+        // No "My Movies" in the initial list
+        val list1 = MovieList(id = "2", name = "Action")
+        val list2 = MovieList(id = "3", name = "Sci-Fi")
+        val (vm, _, _) = makeVm(initialLists = listOf(list1, list2))
+        vm.loadLists("uid")
+        vm.selectList(list1)
+        vm.deleteList(list1, "uid")
+        // After sort, Sci-Fi is first; list1 filtered out → first remaining is list2
+        assertEquals("Sci-Fi", vm.activeList.value?.name)
+    }
+
+    @Test
+    fun deleteList_success_doesNotChangeActiveListWhenNotActive() = runTest {
+        val (vm, _, _) = makeVm()
+        vm.loadLists("uid")
+        vm.selectList(myMovies)
+        vm.deleteList(action, "uid")
+        assertEquals("My Movies", vm.activeList.value?.name)
+    }
+
+    @Test
+    fun deleteList_success_clearsDeleteListError() = runTest {
+        // First cause a remove failure to set the error
+        val (vm, _, _) = makeVm(removeResult = Result.failure(RuntimeException("fail")))
+        vm.loadLists("uid")
+        vm.deleteList(action, "uid")
+        assertNotNull("precondition: error should be set", vm.deleteListError.value)
+
+        // Now a fresh VM that succeeds
+        val (vm2, _, _) = makeVm()
+        vm2.loadLists("uid")
+        vm2.deleteList(action, "uid")
+        assertNull(vm2.deleteListError.value)
+    }
+
+    // ── failure path ──────────────────────────────────────────────────────────
+
+    @Test
+    fun deleteList_removeListFromMoviesFailure_setsError() = runTest {
+        val (vm, _, _) = makeVm(removeResult = Result.failure(RuntimeException("remove failed")))
+        vm.loadLists("uid")
+        vm.deleteList(action, "uid")
+        assertNotNull(vm.deleteListError.value)
+    }
+
+    @Test
+    fun deleteList_removeListFromMoviesFailure_doesNotSetSuccess() = runTest {
+        val (vm, _, _) = makeVm(removeResult = Result.failure(RuntimeException("fail")))
+        vm.loadLists("uid")
+        vm.deleteList(action, "uid")
+        assertFalse(vm.deleteListSuccess.value)
+    }
+
+    @Test
+    fun deleteList_deleteListFailure_setsError() = runTest {
+        val (vm, _, _) = makeVm(deleteResult = Result.failure(RuntimeException("delete failed")))
+        vm.loadLists("uid")
+        vm.deleteList(action, "uid")
+        assertNotNull(vm.deleteListError.value)
+    }
+
+    @Test
+    fun deleteList_deleteListFailure_doesNotSetSuccess() = runTest {
+        val (vm, _, _) = makeVm(deleteResult = Result.failure(RuntimeException("fail")))
+        vm.loadLists("uid")
+        vm.deleteList(action, "uid")
+        assertFalse(vm.deleteListSuccess.value)
+    }
+
+    // ── clearDeleteListSuccess ────────────────────────────────────────────────
+
+    @Test
+    fun clearDeleteListSuccess_clearsSuccess() = runTest {
+        val (vm, _, _) = makeVm()
+        vm.loadLists("uid")
+        vm.deleteList(action, "uid")
+        assertTrue("precondition: success should be set", vm.deleteListSuccess.value)
+        vm.clearDeleteListSuccess()
+        assertFalse(vm.deleteListSuccess.value)
+    }
+}

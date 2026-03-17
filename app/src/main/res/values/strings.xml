@@ -1,0 +1,98 @@
+<resources>
+    <string name="app_name">Movie List</string>
+    <string name="hello_name">Hello %s!</string>
+
+    <!-- Auth screen -->
+    <string name="label_email">Email</string>
+    <string name="label_password">Password</string>
+    <string name="label_confirm_password">Confirm Password</string>
+    <string name="action_login">Log In</string>
+    <string name="action_sign_up">Sign Up</string>
+    <string name="action_forgot_password">Forgot Password?</string>
+    <string name="tab_sign_up">Sign Up</string>
+    <string name="tab_log_in">Log In</string>
+    <string name="error_passwords_do_not_match">Passwords do not match</string>
+    <string name="error_email_already_exists">An account with this email already exists</string>
+    <string name="error_password_too_short">Password must be at least 6 characters</string>
+
+    <!-- Home screen -->
+    <string name="app_bar_title">My Movie Tracker</string>
+    <string name="cd_open_menu">Open menu</string>
+    <string name="hint_search_movies">Search movies…</string>
+    <string name="cd_sort_filter">Sort / filter</string>
+    <string name="cd_add_movie">Add movie</string>
+    <string name="empty_no_movies">No movies yet. Add one!</string>
+
+    <!-- Movie Detail screen – view mode -->
+    <string name="cd_back">Back</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_watch_trailer">Watch Trailer</string>
+    <string name="placeholder_title">Title</string>
+    <string name="placeholder_year">Year</string>
+    <string name="placeholder_genre">Genre</string>
+    <string name="placeholder_list">List</string>
+    <string name="placeholder_trailer">Trailer URL</string>
+    <string name="placeholder_notes">Notes</string>
+    <string name="status_watched">Watched</string>
+    <string name="status_want_to_watch">Want to Watch</string>
+    <string name="label_lists">Lists</string>
+    <string name="label_rating">Rating</string>
+    <string name="empty_no_movies_search">No movies match your search.</string>
+
+    <!-- Movie Detail screen – edit mode -->
+    <string name="cd_cancel_edit">Cancel edit</string>
+    <string name="cd_delete_movie">Delete movie</string>
+    <string name="error_save_movie_failed">Failed to save movie. Please try again.</string>
+    <string name="error_delete_movie_failed">Failed to delete movie. Please try again.</string>
+    <string name="dialog_title_delete_movie">Delete movie?</string>
+    <string name="dialog_msg_delete_movie">Delete \'%1$s\'? This cannot be undone.</string>
+
+    <!-- Navigation drawer -->
+    <string name="cd_close_menu">Close menu</string>
+    <string name="action_log_out">Log Out</string>
+    <string name="action_settings">Settings</string>
+    <string name="action_create_list">Create List</string>
+
+    <!-- Create list dialog -->
+    <string name="title_new_list">New List</string>
+    <string name="label_list_name">List name</string>
+    <string name="action_create">Create</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="error_duplicate_list_name">A list with this name already exists</string>
+    <string name="error_create_list_failed">Failed to create list. Please try again.</string>
+
+    <!-- Rename list dialog -->
+    <string name="title_rename_list">Rename List</string>
+    <string name="action_save">Save</string>
+    <string name="cd_rename_list">Rename list</string>
+    <string name="error_rename_list_failed">Failed to rename list. Please try again.</string>
+
+    <!-- Settings screen -->
+    <string name="title_settings">Settings</string>
+    <string name="title_appearance">Appearance</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_system">Follow Device Settings</string>
+    <string name="label_more_settings_coming_soon">More settings coming soon</string>
+
+    <!-- Watch filters -->
+    <string name="filter_all">Show All</string>
+    <string name="filter_watched">Watched Only</string>
+    <string name="filter_want_to_watch">Want to Watch Only</string>
+    <string name="empty_no_movies_filter">No movies match the current filter.</string>
+
+    <!-- Sort orders -->
+    <string name="sort_title_asc">Title (A–Z)</string>
+    <string name="sort_title_desc">Title (Z–A)</string>
+    <string name="sort_year_asc">Year (Oldest First)</string>
+    <string name="sort_year_desc">Year (Newest First)</string>
+    <string name="sort_rating_desc">Rating (Highest First)</string>
+    <string name="sort_rating_asc">Rating (Lowest First)</string>
+
+    <!-- Delete list dialog -->
+    <string name="title_delete_list">Delete list?</string>
+    <string name="msg_delete_list_confirm">Delete \'%1$s\'? Movies in this list will remain in My Movies and any other lists they\'re assigned to.</string>
+    <string name="action_delete">Delete</string>
+    <string name="cd_delete_list">Delete list</string>
+    <string name="error_delete_list_failed">Failed to delete list. Please try again.</string>
+</resources>
