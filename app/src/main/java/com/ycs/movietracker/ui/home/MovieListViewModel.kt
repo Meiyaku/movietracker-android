@@ -3,19 +3,34 @@ package com.ycs.movietracker.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ycs.movietracker.data.model.MovieList
-import com.ycs.movietracker.data.repository.FirebaseMovieListRepository
-import com.ycs.movietracker.data.repository.FirebaseMovieRepository
 import com.ycs.movietracker.data.repository.MovieListRepository
+import android.content.Context
+import com.ycs.movietracker.R
 import com.ycs.movietracker.data.repository.MovieRepository
+import com.ycs.movietracker.util.AppConfig
+import com.ycs.movietracker.util.toUserMessage
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import timber.log.Timber
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class MovieListViewModel(
-    private val listRepository: MovieListRepository = FirebaseMovieListRepository(),
-    private val movieRepository: MovieRepository = FirebaseMovieRepository()
+@HiltViewModel
+class MovieListViewModel @Inject constructor(
+    private val listRepository: MovieListRepository,
+    private val movieRepository: MovieRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
+
+    private val _uid = MutableStateFlow<String?>(null)
 
     private val _lists = MutableStateFlow<List<MovieList>>(emptyList())
     val lists: StateFlow<List<MovieList>> = _lists.asStateFlow()
@@ -23,32 +38,67 @@ class MovieListViewModel(
     private val _activeList = MutableStateFlow<MovieList?>(null)
     val activeList: StateFlow<MovieList?> = _activeList.asStateFlow()
 
-    private val _createListError = MutableStateFlow<String?>(null)
-    val createListError: StateFlow<String?> = _createListError.asStateFlow()
+    private val _isLoadingLists = MutableStateFlow(false)
+    val isLoadingLists: StateFlow<Boolean> = _isLoadingLists.asStateFlow()
 
-    private val _isCreatingList = MutableStateFlow(false)
-    val isCreatingList: StateFlow<Boolean> = _isCreatingList.asStateFlow()
+    private val _listLoadError = MutableStateFlow<String?>(null)
+    val listLoadError: StateFlow<String?> = _listLoadError.asStateFlow()
 
-    private val _createListSuccess = MutableStateFlow(false)
-    val createListSuccess: StateFlow<Boolean> = _createListSuccess.asStateFlow()
+    fun clearListLoadError() { _listLoadError.value = null }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun observeLists() = _uid.filterNotNull().flatMapLatest { uid ->
+        listRepository.getLists(uid)
+            .onStart { _isLoadingLists.value = true }
+            .onEach { result ->
+                _isLoadingLists.value = false
+                result.onSuccess { rawLists ->
+                    _listLoadError.value = null
+                    val sorted = sort(rawLists)
+                    _lists.value = sorted
+                    val currentActive = _activeList.value
+                    val stillExists = currentActive != null && sorted.any { it.id == currentActive.id }
+                    if (!stillExists) {
+                        val newActive = sorted.firstOrNull { it.isDefault }
+                            ?: sorted.firstOrNull()
+                        _activeList.value = newActive
+                    }
+                }
+                result.onFailure { error ->
+                    Timber.e(error, "loadLists failed [uid=$uid]")
+                    _listLoadError.value = error.toUserMessage(context)
+                }
+            }
+    }
+
+    init {
+        // Collect observeLists() in init. When uid changes, flatMapLatest cancels the previous
+        // inner flow, triggering awaitClose { listener.remove() } in callbackFlow.
+        viewModelScope.launch {
+            observeLists().collect {}
+        }
+    }
+
+    // ── Create ────────────────────────────────────────────────────────────────
+
+    private val _createState = MutableStateFlow<ListMutationState>(ListMutationState.Idle)
+    val createState: StateFlow<ListMutationState> = _createState.asStateFlow()
+
+    // ── Rename ────────────────────────────────────────────────────────────────
+
+    private val _renameState = MutableStateFlow<ListMutationState>(ListMutationState.Idle)
+    val renameState: StateFlow<ListMutationState> = _renameState.asStateFlow()
+
+    // ── Delete ────────────────────────────────────────────────────────────────
+
+    private val _deleteState = MutableStateFlow<ListMutationState>(ListMutationState.Idle)
+    val deleteState: StateFlow<ListMutationState> = _deleteState.asStateFlow()
+
+    // ── Actions ───────────────────────────────────────────────────────────────
 
     fun loadLists(uid: String) {
         if (uid.isBlank()) return
-        viewModelScope.launch {
-            listRepository.getLists(uid).collect { rawLists ->
-                val sorted = sort(rawLists)
-                _lists.value = sorted
-
-                // Keep the current active selection if it still exists in the new list;
-                // otherwise fall back to "My Movies" (or the first list if absent).
-                val currentActive = _activeList.value
-                val stillExists = currentActive != null && sorted.any { it.id == currentActive.id }
-                if (!stillExists) {
-                    _activeList.value = sorted.firstOrNull { it.name == "My Movies" }
-                        ?: sorted.firstOrNull()
-                }
-            }
-        }
+        _uid.value = uid
     }
 
     fun selectList(list: MovieList) {
@@ -57,123 +107,100 @@ class MovieListViewModel(
 
     fun createList(name: String, uid: String) {
         val trimmedName = name.trim()
-        val isDuplicate = _lists.value.any { it.name.trim().equals(trimmedName, ignoreCase = true) }
-        if (isDuplicate) {
-            _createListError.value = "A list with this name already exists"
+        if (trimmedName.length > AppConfig.MAX_LIST_NAME_LENGTH) {
+            _createState.value = ListMutationState.Error(context.getString(R.string.error_list_name_too_long))
+            return
+        }
+        if (_lists.value.any { it.name.trim().equals(trimmedName, ignoreCase = true) }) {
+            _createState.value = ListMutationState.Error(context.getString(R.string.error_duplicate_list_name))
             return
         }
         viewModelScope.launch {
-            _isCreatingList.value = true
-            _createListError.value = null
+            _createState.value = ListMutationState.Loading
             val result = listRepository.createList(uid, MovieList(name = trimmedName))
-            _isCreatingList.value = false
             result.onSuccess { id ->
                 selectList(MovieList(id = id, name = trimmedName))
-                _createListSuccess.value = true
+                _createState.value = ListMutationState.Success
             }
             result.onFailure {
-                _createListError.value = "Failed to create list. Please try again."
+                Timber.e(it, "createList failed [uid=$uid, name=$trimmedName]")
+                _createState.value = ListMutationState.Error(context.getString(R.string.error_create_list_failed))
             }
         }
     }
 
-    fun clearCreateListError() {
-        _createListError.value = null
-    }
-
-    fun clearCreateListSuccess() {
-        _createListSuccess.value = false
-    }
-
-    private val _renameListError = MutableStateFlow<String?>(null)
-    val renameListError: StateFlow<String?> = _renameListError.asStateFlow()
-
-    private val _isRenamingList = MutableStateFlow(false)
-    val isRenamingList: StateFlow<Boolean> = _isRenamingList.asStateFlow()
-
-    private val _renameListSuccess = MutableStateFlow(false)
-    val renameListSuccess: StateFlow<Boolean> = _renameListSuccess.asStateFlow()
+    fun resetCreateState() { _createState.value = ListMutationState.Idle }
 
     fun renameList(list: MovieList, newName: String, uid: String) {
         val trimmedName = newName.trim()
+        if (trimmedName.length > AppConfig.MAX_LIST_NAME_LENGTH) {
+            _renameState.value = ListMutationState.Error(context.getString(R.string.error_list_name_too_long))
+            return
+        }
         val isDuplicate = _lists.value.any {
             it.id != list.id && it.name.trim().equals(trimmedName, ignoreCase = true)
         }
         if (isDuplicate) {
-            _renameListError.value = "A list with this name already exists"
+            _renameState.value = ListMutationState.Error(context.getString(R.string.error_duplicate_list_name))
             return
         }
         viewModelScope.launch {
-            _isRenamingList.value = true
-            _renameListError.value = null
+            _renameState.value = ListMutationState.Loading
             val result = listRepository.updateList(uid, list.copy(name = trimmedName))
-            _isRenamingList.value = false
             result.onSuccess {
                 if (_activeList.value?.id == list.id) {
                     _activeList.value = _activeList.value?.copy(name = trimmedName)
                 }
-                _renameListSuccess.value = true
+                _renameState.value = ListMutationState.Success
             }
             result.onFailure {
-                _renameListError.value = "Failed to rename list. Please try again."
+                Timber.e(it, "renameList failed [uid=$uid, listId=${list.id}]")
+                _renameState.value = ListMutationState.Error(context.getString(R.string.error_rename_list_failed))
             }
         }
     }
 
-    fun clearRenameListError() {
-        _renameListError.value = null
-    }
-
-    fun clearRenameListSuccess() {
-        _renameListSuccess.value = false
-    }
-
-    private val _deleteListError = MutableStateFlow<String?>(null)
-    val deleteListError: StateFlow<String?> = _deleteListError.asStateFlow()
-
-    private val _isDeletingList = MutableStateFlow(false)
-    val isDeletingList: StateFlow<Boolean> = _isDeletingList.asStateFlow()
-
-    private val _deleteListSuccess = MutableStateFlow(false)
-    val deleteListSuccess: StateFlow<Boolean> = _deleteListSuccess.asStateFlow()
+    fun resetRenameState() { _renameState.value = ListMutationState.Idle }
 
     fun deleteList(list: MovieList, uid: String) {
         viewModelScope.launch {
-            _isDeletingList.value = true
-            _deleteListError.value = null
+            _deleteState.value = ListMutationState.Loading
 
             val removeResult = movieRepository.removeListFromMovies(uid, list.id)
             if (removeResult.isFailure) {
-                _isDeletingList.value = false
-                _deleteListError.value = "Failed to delete list. Please try again."
+                Timber.e(removeResult.exceptionOrNull(), "removeListFromMovies failed [uid=$uid, listId=${list.id}]")
+                _deleteState.value = ListMutationState.Error(context.getString(R.string.error_delete_list_failed))
                 return@launch
             }
 
             val deleteResult = listRepository.deleteList(uid, list.id)
-            _isDeletingList.value = false
             deleteResult.onSuccess {
                 if (_activeList.value?.id == list.id) {
                     val updatedLists = _lists.value.filter { it.id != list.id }
-                    _activeList.value = updatedLists.firstOrNull { it.name == "My Movies" }
+                    val newActive = updatedLists.firstOrNull { it.isDefault }
                         ?: updatedLists.firstOrNull()
+                    _activeList.value = newActive
                 }
-                _deleteListSuccess.value = true
+                _deleteState.value = ListMutationState.Success
             }
             deleteResult.onFailure {
-                _deleteListError.value = "Failed to delete list. Please try again."
+                Timber.e(it, "deleteList failed [uid=$uid, listId=${list.id}]")
+                _deleteState.value = ListMutationState.Error(context.getString(R.string.error_delete_list_failed))
             }
         }
     }
 
-    fun clearDeleteListSuccess() {
-        _deleteListSuccess.value = false
-    }
+    fun resetDeleteState() { _deleteState.value = ListMutationState.Idle }
 
     companion object {
-        /** "My Movies" always first; remaining lists sorted A–Z (case-insensitive). */
+        /**
+         * Returns [lists] with MovieList.DEFAULT_LIST_NAME pinned at position 0 and all other lists
+         * sorted A–Z case-insensitively. MovieList.DEFAULT_LIST_NAME is the default list created for every
+         * new user; pinning it avoids it jumping around as the user renames other lists.
+         */
         internal fun sort(lists: List<MovieList>): List<MovieList> {
-            val myMovies = lists.filter { it.name == "My Movies" }
-            val others = lists.filter { it.name != "My Movies" }
+            val myMovies = lists.filter { it.isDefault }
+            val others = lists.filter { !it.isDefault }
                 .sortedBy { it.name.lowercase() }
             return myMovies + others
         }

@@ -9,10 +9,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ycs.movietracker.R
 
 @Composable
@@ -31,7 +31,7 @@ fun DeleteListDialog(
                 Text(stringResource(R.string.msg_delete_list_confirm, listName))
                 if (error != null) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(text = error, color = Color.Red, fontSize = 13.sp)
+                    Text(text = error, style = MaterialTheme.typography.bodySmall, color = Color.Red)
                 }
                 if (isLoading) {
                     Spacer(modifier = Modifier.height(8.dp))

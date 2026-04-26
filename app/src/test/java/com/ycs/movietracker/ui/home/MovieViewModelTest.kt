@@ -1,25 +1,38 @@
 package com.ycs.movietracker.ui.home
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ycs.movietracker.data.model.Movie
+import com.ycs.movietracker.data.model.MoviesPage
+import com.ycs.movietracker.data.model.NewMovie
 import com.ycs.movietracker.data.model.SortOrder
 import com.ycs.movietracker.data.model.WatchStatus
 import com.ycs.movietracker.data.repository.MovieRepository
+import com.ycs.movietracker.data.repository.RemoteConfigRepository
+import com.ycs.movietracker.data.repository.StaleCursorException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import com.ycs.movietracker.util.AppConfig
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
 
 /**
  * Unit tests for [MovieViewModel] — companion test story US-011-T.
@@ -30,10 +43,24 @@ import org.junit.Test
  *
  * Run with: ./gradlew test
  */
+@RunWith(AndroidJUnit4::class)
+@Config(sdk = [33])
 @OptIn(ExperimentalCoroutinesApi::class)
 class MovieViewModelTest {
 
-    private val testDispatcher = UnconfinedTestDispatcher()
+    private val context: Context = ApplicationProvider.getApplicationContext()
+
+    private val fakeRemoteConfig = object : RemoteConfigRepository {
+        override val pageSize = 50
+        override val maxRetryAttempts = 3
+        override val isTmdbSearchEnabled = MutableStateFlow(true)
+        override val tmdbApiKey = MutableStateFlow("")
+    }
+
+    // Shared scheduler so that viewModelScope (Dispatchers.Main), flowOn(computationDispatcher),
+    // and runTest(testDispatcher) all advance the same virtual clock.
+    private val testScheduler = TestCoroutineScheduler()
+    private val testDispatcher = UnconfinedTestDispatcher(testScheduler)
 
     @Before
     fun setUp() {
@@ -49,7 +76,9 @@ class MovieViewModelTest {
 
     private class FakeMovieRepo(
         private val moviesByList: Map<String, List<Movie>> = emptyMap(),
-        private val addResult: Result<String> = Result.success("new-id"),
+        private val pageSize: Int = 50,
+        private val addId: String = "new-id",
+        private val addFailure: Exception? = null,
         private val updateResult: Result<Unit> = Result.success(Unit),
         private val deleteResult: Result<Unit> = Result.success(Unit)
     ) : MovieRepository {
@@ -58,12 +87,26 @@ class MovieViewModelTest {
         var deleteCallCount = 0
         var lastDeletedId: String? = null
 
-        override fun getMoviesForList(uid: String, listId: String): Flow<List<Movie>> =
-            flowOf(moviesByList[listId] ?: emptyList())
+        override suspend fun getMoviesPage(
+            uid: String, listId: String, pageSize: Int, afterId: String?
+        ): Result<MoviesPage> {
+            val all = moviesByList[listId] ?: emptyList()
+            val startIndex = if (afterId == null) 0
+                else (all.indexOfFirst { it.id == afterId } + 1).coerceAtLeast(0)
+            val page = all.drop(startIndex).take(this.pageSize)
+            return Result.success(
+                MoviesPage(
+                    movies = page,
+                    lastId = page.lastOrNull()?.id,
+                    hasMore = startIndex + page.size < all.size
+                )
+            )
+        }
 
-        override suspend fun addMovie(uid: String, movie: Movie): Result<String> {
+        override suspend fun addMovie(uid: String, movie: NewMovie): Result<Movie> {
             addCallCount++
-            return addResult
+            return if (addFailure != null) Result.failure(addFailure)
+                   else Result.success(movie.toMovie(id = addId))
         }
 
         override suspend fun updateMovie(uid: String, movie: Movie): Result<Unit> {
@@ -77,29 +120,38 @@ class MovieViewModelTest {
             return deleteResult
         }
 
+        override suspend fun getMovieById(uid: String, movieId: String): Result<Movie> =
+            Result.failure(UnsupportedOperationException())
         override suspend fun removeListFromMovies(uid: String, listId: String): Result<Unit> =
             Result.success(Unit)
+        override suspend fun checkDuplicate(uid: String, title: String, year: Int?, genre: String?, excludeId: String?): Result<Boolean> =
+            Result.success(false)
+        override suspend fun deleteAllMovies(uid: String): Result<Unit> = Result.success(Unit)
     }
 
-    private fun movie(title: String, year: Int? = null, rating: Int? = null) =
+    private fun movie(title: String, year: Int? = null, rating: Double? = null) =
         Movie(id = title, title = title, year = year, rating = rating)
+
+    private fun newMovie(title: String, year: Int? = null, rating: Double? = null) =
+        NewMovie(title = title, year = year, rating = rating)
 
     private fun makeVm(
         movies: List<Movie> = emptyList(),
         activeListId: String? = "list-1",
-        addResult: Result<String> = Result.success("new-id"),
+        pageSize: Int = 50,
+        addFailure: Exception? = null,
         updateResult: Result<Unit> = Result.success(Unit),
-        deleteResult: Result<Unit> = Result.success(Unit)
-    ): Pair<MovieViewModel, MutableStateFlow<String?>> {
+        deleteResult: Result<Unit> = Result.success(Unit),
+        computationDispatcher: CoroutineDispatcher = testDispatcher
+    ): MovieViewModel {
         val repo = FakeMovieRepo(
             moviesByList = mapOf("list-1" to movies),
-            addResult = addResult,
+            pageSize = pageSize,
+            addFailure = addFailure,
             updateResult = updateResult,
             deleteResult = deleteResult
         )
-        val activeListIdFlow = MutableStateFlow(activeListId)
-        val vm = MovieViewModel(repo, MutableStateFlow("uid"), activeListIdFlow)
-        return vm to activeListIdFlow
+        return MovieViewModel(repo, context, fakeRemoteConfig, computationDispatcher).also { it.setSession("uid", activeListId) }
     }
 
     // ── search filtering ─────────────────────────────────────────────────────
@@ -107,15 +159,16 @@ class MovieViewModelTest {
     @Test
     fun filteredMovies_noQuery_returnsAll() = runTest {
         val movies = listOf(movie("The Matrix"), movie("Inception"), movie("Avatar"))
-        val (vm, _) = makeVm(movies = movies)
+        val vm = makeVm(movies = movies)
         assertEquals(3, vm.filteredMovies.value.size)
     }
 
     @Test
-    fun filteredMovies_filtersBySearchQueryCaseInsensitive() = runTest {
-        val movies = listOf(movie("The Matrix"), movie("Inception"), movie("matrix reloaded"))
-        val (vm, _) = makeVm(movies = movies)
+    fun filteredMovies_filtersBySearchQueryCaseInsensitive() = runTest(testDispatcher) {
+        val vm = makeVm(movies = listOf(movie("The Matrix"), movie("Inception"), movie("matrix reloaded")))
         vm.setSearchQuery("matrix")
+        advanceTimeBy(AppConfig.SEARCH_DEBOUNCE_MS)
+        runCurrent()
         val titles = vm.filteredMovies.value.map { it.title }
         // Default sort is TITLE_ASC; "matrix reloaded" (m) < "The Matrix" (t)
         assertEquals(listOf("matrix reloaded", "The Matrix"), titles)
@@ -124,17 +177,18 @@ class MovieViewModelTest {
     @Test
     fun filteredMovies_blankQuery_returnsAll() = runTest {
         val movies = listOf(movie("The Matrix"), movie("Inception"))
-        val (vm, _) = makeVm(movies = movies)
+        val vm = makeVm(movies = movies)
         vm.setSearchQuery("matrix")
         vm.setSearchQuery("")
         assertEquals(2, vm.filteredMovies.value.size)
     }
 
     @Test
-    fun filteredMovies_noMatchingQuery_returnsEmpty() = runTest {
-        val movies = listOf(movie("The Matrix"), movie("Inception"))
-        val (vm, _) = makeVm(movies = movies)
+    fun filteredMovies_noMatchingQuery_returnsEmpty() = runTest(testDispatcher) {
+        val vm = makeVm(movies = listOf(movie("The Matrix"), movie("Inception")))
         vm.setSearchQuery("xyzzy")
+        advanceTimeBy(AppConfig.SEARCH_DEBOUNCE_MS)
+        runCurrent()
         assertTrue(vm.filteredMovies.value.isEmpty())
     }
 
@@ -143,7 +197,7 @@ class MovieViewModelTest {
     @Test
     fun setSortOrder_titleAsc_producesAlphabeticallyAscendingList() = runTest {
         val movies = listOf(movie("Zorro"), movie("Avatar"), movie("Matrix"))
-        val (vm, _) = makeVm(movies = movies)
+        val vm = makeVm(movies = movies)
         vm.setSortOrder(SortOrder.TITLE_ASC)
         assertEquals(listOf("Avatar", "Matrix", "Zorro"), vm.filteredMovies.value.map { it.title })
     }
@@ -151,7 +205,7 @@ class MovieViewModelTest {
     @Test
     fun setSortOrder_titleDesc_producesAlphabeticallyDescendingList() = runTest {
         val movies = listOf(movie("Avatar"), movie("Zorro"), movie("Matrix"))
-        val (vm, _) = makeVm(movies = movies)
+        val vm = makeVm(movies = movies)
         vm.setSortOrder(SortOrder.TITLE_DESC)
         assertEquals(listOf("Zorro", "Matrix", "Avatar"), vm.filteredMovies.value.map { it.title })
     }
@@ -159,7 +213,7 @@ class MovieViewModelTest {
     @Test
     fun setSortOrder_titleAsc_caseInsensitive() = runTest {
         val movies = listOf(movie("zebra"), movie("Apple"), movie("mango"))
-        val (vm, _) = makeVm(movies = movies)
+        val vm = makeVm(movies = movies)
         vm.setSortOrder(SortOrder.TITLE_ASC)
         assertEquals(listOf("Apple", "mango", "zebra"), vm.filteredMovies.value.map { it.title })
     }
@@ -169,7 +223,7 @@ class MovieViewModelTest {
     @Test
     fun setSortOrder_yearAsc_placesNullYearAtEnd() = runTest {
         val movies = listOf(movie("A", year = null), movie("B", year = 2020), movie("C", year = 1990))
-        val (vm, _) = makeVm(movies = movies)
+        val vm = makeVm(movies = movies)
         vm.setSortOrder(SortOrder.YEAR_ASC)
         val result = vm.filteredMovies.value
         assertNull("last movie should have null year", result.last().year)
@@ -178,7 +232,7 @@ class MovieViewModelTest {
     @Test
     fun setSortOrder_yearAsc_sortsNonNullYearsAscending() = runTest {
         val movies = listOf(movie("A", year = 2020), movie("B", year = 1990), movie("C", year = null))
-        val (vm, _) = makeVm(movies = movies)
+        val vm = makeVm(movies = movies)
         vm.setSortOrder(SortOrder.YEAR_ASC)
         val nonNull = vm.filteredMovies.value.filter { it.year != null }
         assertEquals(listOf(1990, 2020), nonNull.map { it.year })
@@ -187,7 +241,7 @@ class MovieViewModelTest {
     @Test
     fun setSortOrder_yearDesc_placesNullYearAtEnd() = runTest {
         val movies = listOf(movie("A", year = null), movie("B", year = 2000), movie("C", year = 2010))
-        val (vm, _) = makeVm(movies = movies)
+        val vm = makeVm(movies = movies)
         vm.setSortOrder(SortOrder.YEAR_DESC)
         assertNull("last movie should have null year", vm.filteredMovies.value.last().year)
     }
@@ -195,7 +249,7 @@ class MovieViewModelTest {
     @Test
     fun setSortOrder_yearDesc_sortsNonNullYearsDescending() = runTest {
         val movies = listOf(movie("A", year = 1990), movie("B", year = 2020), movie("C", year = null))
-        val (vm, _) = makeVm(movies = movies)
+        val vm = makeVm(movies = movies)
         vm.setSortOrder(SortOrder.YEAR_DESC)
         val nonNull = vm.filteredMovies.value.filter { it.year != null }
         assertEquals(listOf(2020, 1990), nonNull.map { it.year })
@@ -205,25 +259,25 @@ class MovieViewModelTest {
 
     @Test
     fun setSortOrder_ratingAsc_placesUnratedMoviesAtEnd() = runTest {
-        val movies = listOf(movie("A", rating = null), movie("B", rating = 3), movie("C", rating = 1))
-        val (vm, _) = makeVm(movies = movies)
+        val movies = listOf(movie("A", rating = null), movie("B", rating = 3.0), movie("C", rating = 1.0))
+        val vm = makeVm(movies = movies)
         vm.setSortOrder(SortOrder.RATING_ASC)
         assertNull("last movie should have null rating", vm.filteredMovies.value.last().rating)
     }
 
     @Test
     fun setSortOrder_ratingAsc_sortsNonNullRatingsAscending() = runTest {
-        val movies = listOf(movie("A", rating = 5), movie("B", rating = 1), movie("C", rating = null))
-        val (vm, _) = makeVm(movies = movies)
+        val movies = listOf(movie("A", rating = 5.0), movie("B", rating = 1.0), movie("C", rating = null))
+        val vm = makeVm(movies = movies)
         vm.setSortOrder(SortOrder.RATING_ASC)
         val withRating = vm.filteredMovies.value.filter { it.rating != null }
-        assertEquals(listOf(1, 5), withRating.map { it.rating })
+        assertEquals(listOf(1.0, 5.0), withRating.map { it.rating })
     }
 
     @Test
     fun setSortOrder_ratingDesc_placesUnratedMoviesAtEnd() = runTest {
-        val movies = listOf(movie("A", rating = null), movie("B", rating = 5), movie("C", rating = 2))
-        val (vm, _) = makeVm(movies = movies)
+        val movies = listOf(movie("A", rating = null), movie("B", rating = 5.0), movie("C", rating = 2.0))
+        val vm = makeVm(movies = movies)
         vm.setSortOrder(SortOrder.RATING_DESC)
         assertNull("last movie should have null rating", vm.filteredMovies.value.last().rating)
     }
@@ -235,18 +289,17 @@ class MovieViewModelTest {
         val list1Movies = listOf(movie("Matrix"))
         val list2Movies = listOf(movie("Inception"), movie("Avatar"))
         val repo = FakeMovieRepo(moviesByList = mapOf("list-1" to list1Movies, "list-2" to list2Movies))
-        val activeListIdFlow = MutableStateFlow<String?>("list-1")
-        val vm = MovieViewModel(repo, MutableStateFlow("uid"), activeListIdFlow)
+        val vm = MovieViewModel(repo, context, fakeRemoteConfig, testDispatcher).also { it.setSession("uid", "list-1") }
 
         assertEquals(1, vm.filteredMovies.value.size)
 
-        activeListIdFlow.value = "list-2"
+        vm.setSession("uid", "list-2")
         assertEquals(2, vm.filteredMovies.value.size)
     }
 
     @Test
     fun filteredMovies_nullActiveListId_returnsEmpty() = runTest {
-        val (vm, _) = makeVm(movies = listOf(movie("Matrix")), activeListId = null)
+        val vm = makeVm(movies = listOf(movie("Matrix")), activeListId = null)
         assertTrue(vm.filteredMovies.value.isEmpty())
     }
 
@@ -255,15 +308,15 @@ class MovieViewModelTest {
     @Test
     fun addMovie_delegatesToRepository() = runTest {
         val repo = FakeMovieRepo()
-        val vm = MovieViewModel(repo, MutableStateFlow("uid"), MutableStateFlow("list-1"))
-        vm.addMovie(movie("New Movie"))
+        val vm = MovieViewModel(repo, context, fakeRemoteConfig, testDispatcher).also { it.setSession("uid", "list-1") }
+        vm.addMovie(newMovie("New Movie"))
         assertEquals(1, repo.addCallCount)
     }
 
     @Test
     fun updateMovie_delegatesToRepository() = runTest {
         val repo = FakeMovieRepo()
-        val vm = MovieViewModel(repo, MutableStateFlow("uid"), MutableStateFlow("list-1"))
+        val vm = MovieViewModel(repo, context, fakeRemoteConfig, testDispatcher).also { it.setSession("uid", "list-1") }
         vm.updateMovie(movie("Existing"))
         assertEquals(1, repo.updateCallCount)
     }
@@ -271,41 +324,174 @@ class MovieViewModelTest {
     @Test
     fun deleteMovie_delegatesToRepository() = runTest {
         val repo = FakeMovieRepo()
-        val vm = MovieViewModel(repo, MutableStateFlow("uid"), MutableStateFlow("list-1"))
+        val vm = MovieViewModel(repo, context, fakeRemoteConfig, testDispatcher).also { it.setSession("uid", "list-1") }
         vm.deleteMovie("movie-123")
         assertEquals(1, repo.deleteCallCount)
         assertEquals("movie-123", repo.lastDeletedId)
+    }
+
+    // ── isLoadingMovies ───────────────────────────────────────────────────────
+
+    @Test
+    fun isLoadingMovies_falseWhenActiveListIdIsNull() = runTest {
+        val vm = makeVm(movies = listOf(movie("Matrix")), activeListId = null)
+        assertFalse(vm.isLoadingMovies.value)
+    }
+
+    @Test
+    fun isLoadingMovies_falseAfterMoviesEmitted() = runTest {
+        val vm = makeVm(movies = listOf(movie("Matrix")))
+        assertFalse(vm.isLoadingMovies.value)
+    }
+
+    @Test
+    fun isLoadingMovies_falseAfterEmptyMoviesEmitted() = runTest {
+        val vm = makeVm(movies = emptyList())
+        assertFalse(vm.isLoadingMovies.value)
     }
 
     // ── snackbar errors ───────────────────────────────────────────────────────
 
     @Test
     fun addMovie_failure_setsSnackbarMessage() = runTest {
-        val (vm, _) = makeVm(addResult = Result.failure(RuntimeException("Network error")))
-        vm.addMovie(movie("New Movie"))
+        val vm = makeVm(addFailure = RuntimeException("Network error"))
+        vm.addMovie(newMovie("New Movie"))
         assertNotNull(vm.snackbarMessage.value)
     }
 
     @Test
     fun updateMovie_failure_setsSnackbarMessage() = runTest {
-        val (vm, _) = makeVm(updateResult = Result.failure(RuntimeException("fail")))
+        val vm = makeVm(updateResult = Result.failure(RuntimeException("fail")))
         vm.updateMovie(movie("Movie"))
         assertNotNull(vm.snackbarMessage.value)
     }
 
     @Test
     fun deleteMovie_failure_setsSnackbarMessage() = runTest {
-        val (vm, _) = makeVm(deleteResult = Result.failure(RuntimeException("fail")))
+        val vm = makeVm(deleteResult = Result.failure(RuntimeException("fail")))
         vm.deleteMovie("id")
         assertNotNull(vm.snackbarMessage.value)
     }
 
     @Test
     fun clearSnackbarMessage_clearsMessage() = runTest {
-        val (vm, _) = makeVm(deleteResult = Result.failure(RuntimeException("fail")))
+        val vm = makeVm(deleteResult = Result.failure(RuntimeException("fail")))
         vm.deleteMovie("id")
         assertNotNull("precondition", vm.snackbarMessage.value)
         vm.clearSnackbarMessage()
         assertNull(vm.snackbarMessage.value)
+    }
+
+    // ── pagination ────────────────────────────────────────────────────────────
+
+    @Test
+    fun loadMoreMovies_appendsNextPage() = runTest {
+        val allMovies = (1..5).map { movie("Movie $it") }
+        val vm = makeVm(movies = allMovies, pageSize = 3)
+        assertEquals(3, vm.filteredMovies.value.size)
+        vm.loadMoreMovies()
+        assertEquals(5, vm.filteredMovies.value.size)
+    }
+
+    @Test
+    fun hasMoreMovies_trueWhenFirstPageIsFull() = runTest {
+        val allMovies = (1..5).map { movie("Movie $it") }
+        val vm = makeVm(movies = allMovies, pageSize = 3)
+        assertTrue(vm.hasMoreMovies.value)
+    }
+
+    @Test
+    fun hasMoreMovies_falseWhenFewerMoviesThanPageSize() = runTest {
+        val vm = makeVm(movies = (1..2).map { movie("Movie $it") }, pageSize = 3)
+        assertFalse(vm.hasMoreMovies.value)
+    }
+
+    @Test
+    fun loadMoreMovies_noopWhenHasMoreIsFalse() = runTest {
+        val vm = makeVm(movies = listOf(movie("Only")), pageSize = 3)
+        vm.loadMoreMovies()
+        assertEquals(1, vm.filteredMovies.value.size)
+    }
+
+    @Test
+    fun hasMoreMovies_falseWhenPageIsEmptyEvenIfRepositoryClaimsMore() = runTest {
+        // Simulate a misbehaving server: returns empty page but says hasMore=true.
+        // The safeguard must force hasMoreMovies=false to prevent an infinite load loop
+        // where lastMovieCursor resets to null and loadMore keeps re-fetching page 1.
+        val lyingRepo = object : MovieRepository {
+            override suspend fun getMoviesPage(
+                uid: String, listId: String, pageSize: Int, afterId: String?
+            ) = Result.success(MoviesPage(movies = emptyList(), lastId = null, hasMore = true))
+            override suspend fun addMovie(uid: String, movie: NewMovie) = Result.success(movie.toMovie(id = "id"))
+            override suspend fun updateMovie(uid: String, movie: Movie) = Result.success(Unit)
+            override suspend fun deleteMovie(uid: String, movieId: String) = Result.success(Unit)
+            override suspend fun getMovieById(uid: String, movieId: String) = Result.failure<Movie>(UnsupportedOperationException())
+            override suspend fun removeListFromMovies(uid: String, listId: String) = Result.success(Unit)
+            override suspend fun checkDuplicate(uid: String, title: String, year: Int?, genre: String?, excludeId: String?) = Result.success(false)
+            override suspend fun deleteAllMovies(uid: String) = Result.success(Unit)
+        }
+        val vm = MovieViewModel(lyingRepo, context, fakeRemoteConfig, testDispatcher).also { it.setSession("uid", "list-1") }
+        assertFalse(vm.hasMoreMovies.value)
+    }
+
+    @Test
+    fun loadMoreMovies_restartsFromPageOneWhenCursorIsStale() = runTest {
+        val allMovies = (1..6).map { movie("Movie $it") }
+        // Repo throws StaleCursorException on the first paginated request, then succeeds normally.
+        var callCount = 0
+        val staleCursorRepo = object : MovieRepository {
+            override suspend fun getMoviesPage(
+                uid: String, listId: String, pageSize: Int, afterId: String?
+            ): Result<MoviesPage> {
+                callCount++
+                if (afterId != null && callCount == 2) {
+                    return Result.failure(StaleCursorException(afterId))
+                }
+                val start = if (afterId == null) 0
+                    else (allMovies.indexOfFirst { it.id == afterId } + 1).coerceAtLeast(0)
+                val page = allMovies.drop(start).take(pageSize)
+                return Result.success(MoviesPage(page, page.lastOrNull()?.id, start + page.size < allMovies.size))
+            }
+            override suspend fun addMovie(uid: String, movie: NewMovie) = Result.success(movie.toMovie(id = "id"))
+            override suspend fun updateMovie(uid: String, movie: Movie) = Result.success(Unit)
+            override suspend fun deleteMovie(uid: String, movieId: String) = Result.success(Unit)
+            override suspend fun getMovieById(uid: String, movieId: String) = Result.failure<Movie>(UnsupportedOperationException())
+            override suspend fun removeListFromMovies(uid: String, listId: String) = Result.success(Unit)
+            override suspend fun checkDuplicate(uid: String, title: String, year: Int?, genre: String?, excludeId: String?) = Result.success(false)
+            override suspend fun deleteAllMovies(uid: String) = Result.success(Unit)
+        }
+        val vm = MovieViewModel(staleCursorRepo, context, fakeRemoteConfig, testDispatcher)
+            .also { it.setSession("uid", "list-1") }
+        // After stale-cursor recovery the list should be reloaded from page 1 with no error shown.
+        assertEquals(allMovies.size, vm.filteredMovies.value.size)
+        assertNull("no snackbar on stale cursor", vm.snackbarMessage.value)
+    }
+
+    // ── optimistic CRUD ───────────────────────────────────────────────────────
+
+    @Test
+    fun addMovie_optimisticallyAppearsInList() = runTest {
+        val vm = makeVm(movies = listOf(movie("Existing")))
+        vm.addMovie(newMovie("New"))
+        assertTrue(vm.filteredMovies.value.any { it.title == "New" })
+    }
+
+    @Test
+    fun updateMovie_optimisticallyReplacesInList() = runTest {
+        val existing = movie("Old Title")
+        val vm = makeVm(movies = listOf(existing))
+        val updated = existing.copy(title = "New Title")
+        vm.updateMovie(updated)
+        assertTrue(vm.filteredMovies.value.any { it.title == "New Title" })
+        assertFalse(vm.filteredMovies.value.any { it.title == "Old Title" })
+    }
+
+    @Test
+    fun deleteMovie_optimisticallyRemovedFromList() = runTest {
+        val toDelete = movie("ToDelete")
+        val vm = makeVm(movies = listOf(toDelete, movie("Keep")))
+        vm.deleteMovie(toDelete.id)
+        assertFalse(vm.filteredMovies.value.any { it.id == toDelete.id })
+        assertEquals(1, vm.filteredMovies.value.size)
     }
 }

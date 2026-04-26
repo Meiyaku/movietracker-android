@@ -1,13 +1,17 @@
 package com.ycs.movietracker.ui.home
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ycs.movietracker.data.model.Movie
 import com.ycs.movietracker.data.model.MovieList
+import com.ycs.movietracker.data.model.MoviesPage
+import com.ycs.movietracker.data.model.NewMovie
 import com.ycs.movietracker.data.repository.MovieListRepository
 import com.ycs.movietracker.data.repository.MovieRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -21,6 +25,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
 
 /**
  * Unit tests for [MovieListViewModel.createList] — companion test story US-007-T.
@@ -31,8 +37,12 @@ import org.junit.Test
  *
  * Run with: ./gradlew test
  */
+@RunWith(AndroidJUnit4::class)
+@Config(sdk = [33])
 @OptIn(ExperimentalCoroutinesApi::class)
 class MovieListViewModelCreateListTest {
+
+    private val context: Context = ApplicationProvider.getApplicationContext()
 
     private val testDispatcher = UnconfinedTestDispatcher()
 
@@ -55,7 +65,7 @@ class MovieListViewModelCreateListTest {
         var createCallCount = 0
         var lastCreatedList: MovieList? = null
 
-        override fun getLists(uid: String): Flow<List<MovieList>> = flowOf(initialLists)
+        override fun getLists(uid: String): Flow<Result<List<MovieList>>> = flowOf(Result.success(initialLists))
         override suspend fun createList(uid: String, list: MovieList): Result<String> {
             createCallCount++
             lastCreatedList = list
@@ -65,14 +75,19 @@ class MovieListViewModelCreateListTest {
             Result.success(Unit)
         override suspend fun deleteList(uid: String, listId: String): Result<Unit> =
             Result.success(Unit)
+        override suspend fun deleteAllLists(uid: String): Result<Unit> = Result.success(Unit)
     }
 
     private val noopMovieRepo = object : MovieRepository {
-        override fun getMoviesForList(uid: String, listId: String): Flow<List<Movie>> = emptyFlow()
-        override suspend fun addMovie(uid: String, movie: Movie): Result<String> = Result.success("")
+        override suspend fun getMoviesPage(uid: String, listId: String, pageSize: Int, afterId: String?): Result<MoviesPage> =
+            Result.success(MoviesPage(emptyList(), null, false))
+        override suspend fun addMovie(uid: String, movie: NewMovie): Result<Movie> = Result.success(movie.toMovie(id = ""))
         override suspend fun updateMovie(uid: String, movie: Movie): Result<Unit> = Result.success(Unit)
         override suspend fun deleteMovie(uid: String, movieId: String): Result<Unit> = Result.success(Unit)
         override suspend fun removeListFromMovies(uid: String, listId: String): Result<Unit> = Result.success(Unit)
+        override suspend fun getMovieById(uid: String, movieId: String): Result<Movie> = Result.failure(UnsupportedOperationException())
+        override suspend fun checkDuplicate(uid: String, title: String, year: Int?, genre: String?, excludeId: String?): Result<Boolean> = Result.success(false)
+        override suspend fun deleteAllMovies(uid: String): Result<Unit> = Result.success(Unit)
     }
 
     private fun makeVm(
@@ -80,7 +95,7 @@ class MovieListViewModelCreateListTest {
         createResult: Result<String> = Result.success("new-id")
     ): Pair<MovieListViewModel, FakeRepo> {
         val repo = FakeRepo(initialLists, createResult)
-        val vm = MovieListViewModel(repo, noopMovieRepo)
+        val vm = MovieListViewModel(repo, noopMovieRepo, context)
         return vm to repo
     }
 
@@ -92,7 +107,7 @@ class MovieListViewModelCreateListTest {
         val (vm, _) = makeVm(initialLists = existing)
         vm.loadLists("uid")
         vm.createList("Action", "uid")
-        assertEquals("A list with this name already exists", vm.createListError.value)
+        assertEquals("A list with this name already exists", (vm.createState.value as ListMutationState.Error).message)
     }
 
     @Test
@@ -101,7 +116,7 @@ class MovieListViewModelCreateListTest {
         val (vm, _) = makeVm(initialLists = existing)
         vm.loadLists("uid")
         vm.createList("action", "uid")
-        assertEquals("A list with this name already exists", vm.createListError.value)
+        assertEquals("A list with this name already exists", (vm.createState.value as ListMutationState.Error).message)
     }
 
     @Test
@@ -119,7 +134,7 @@ class MovieListViewModelCreateListTest {
         val (vm, _) = makeVm(initialLists = existing)
         vm.loadLists("uid")
         vm.createList("  Action  ", "uid")
-        assertEquals("A list with this name already exists", vm.createListError.value)
+        assertEquals("A list with this name already exists", (vm.createState.value as ListMutationState.Error).message)
     }
 
     // ── createList — success path ─────────────────────────────────────────────
@@ -149,7 +164,7 @@ class MovieListViewModelCreateListTest {
     fun createList_success_setsCreateListSuccess() = runTest {
         val (vm, _) = makeVm()
         vm.createList("New List", "uid")
-        assertTrue(vm.createListSuccess.value)
+        assertEquals(ListMutationState.Success, vm.createState.value)
     }
 
     @Test
@@ -159,17 +174,17 @@ class MovieListViewModelCreateListTest {
         vm.loadLists("uid")
         // First, produce a duplicate error
         vm.createList("Action", "uid")
-        assertNotNull("precondition: error should be set", vm.createListError.value)
-        // Now create with a unique name — error should clear
+        assertTrue("precondition: error should be set", vm.createState.value is ListMutationState.Error)
+        // Now create with a unique name — state should change to Success (not Error)
         vm.createList("Drama", "uid")
-        assertNull(vm.createListError.value)
+        assertFalse(vm.createState.value is ListMutationState.Error)
     }
 
     @Test
     fun createList_success_isCreatingListReturnsFalseAfterCompletion() = runTest {
         val (vm, _) = makeVm()
         vm.createList("New List", "uid")
-        assertFalse(vm.isCreatingList.value)
+        assertFalse(vm.createState.value == ListMutationState.Loading)
     }
 
     // ── createList — failure path ─────────────────────────────────────────────
@@ -178,14 +193,14 @@ class MovieListViewModelCreateListTest {
     fun createList_repositoryFailure_setsGenericError() = runTest {
         val (vm, _) = makeVm(createResult = Result.failure(RuntimeException("Firestore error")))
         vm.createList("New List", "uid")
-        assertNotNull(vm.createListError.value)
+        assertTrue(vm.createState.value is ListMutationState.Error)
     }
 
     @Test
     fun createList_repositoryFailure_doesNotSetSuccess() = runTest {
         val (vm, _) = makeVm(createResult = Result.failure(RuntimeException("fail")))
         vm.createList("New List", "uid")
-        assertFalse(vm.createListSuccess.value)
+        assertFalse(vm.createState.value == ListMutationState.Success)
     }
 
     // ── clearCreateListError / clearCreateListSuccess ─────────────────────────
@@ -196,17 +211,17 @@ class MovieListViewModelCreateListTest {
         val (vm, _) = makeVm(initialLists = existing)
         vm.loadLists("uid")
         vm.createList("Action", "uid")
-        assertNotNull("precondition: error should be set", vm.createListError.value)
-        vm.clearCreateListError()
-        assertNull(vm.createListError.value)
+        assertTrue("precondition: error should be set", vm.createState.value is ListMutationState.Error)
+        vm.resetCreateState()
+        assertEquals(ListMutationState.Idle, vm.createState.value)
     }
 
     @Test
     fun clearCreateListSuccess_clearsSuccess() = runTest {
         val (vm, _) = makeVm()
         vm.createList("New List", "uid")
-        assertTrue("precondition: success should be set", vm.createListSuccess.value)
-        vm.clearCreateListSuccess()
-        assertFalse(vm.createListSuccess.value)
+        assertEquals("precondition: success should be set", ListMutationState.Success, vm.createState.value)
+        vm.resetCreateState()
+        assertEquals(ListMutationState.Idle, vm.createState.value)
     }
 }

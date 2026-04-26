@@ -11,7 +11,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ycs.movietracker.data.model.TmdbSearchResult
-import com.ycs.movietracker.data.repository.TmdbRepository
+import com.ycs.movietracker.test.FakeTmdbRepository
 import com.ycs.movietracker.ui.theme.MovietrackerTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -64,7 +64,7 @@ class TmdbSearchDialogTest {
 
     @Test
     fun emptyQuery_doesNotCallRepository() {
-        val fake = FakeTmdbRepo()
+        val fake = FakeTmdbRepository()
         setContent(repository = fake)
         composeTestRule.onNodeWithContentDescription("Search").performClick()
         composeTestRule.waitForIdle()
@@ -73,7 +73,7 @@ class TmdbSearchDialogTest {
 
     @Test
     fun nonEmptyQuery_callsRepositoryWithEnteredText() {
-        val fake = FakeTmdbRepo()
+        val fake = FakeTmdbRepository()
         setContent(repository = fake)
         composeTestRule.onNode(hasSetTextAction()).performTextInput("Dune")
         composeTestRule.onNodeWithContentDescription("Search").performClick()
@@ -86,7 +86,7 @@ class TmdbSearchDialogTest {
 
     @Test
     fun successfulSearch_displaysResultTitle() {
-        val fake = FakeTmdbRepo(searchResult = Result.success(listOf(searchResult(title = "Dune: Part Two"))))
+        val fake = FakeTmdbRepository(searchResult = Result.success(listOf(searchResult(title = "Dune: Part Two"))))
         setContent(repository = fake)
         composeTestRule.onNode(hasSetTextAction()).performTextInput("Dune")
         composeTestRule.onNodeWithContentDescription("Search").performClick()
@@ -96,7 +96,7 @@ class TmdbSearchDialogTest {
 
     @Test
     fun failedSearch_displaysErrorMessage() {
-        val fake = FakeTmdbRepo(searchResult = Result.failure(Exception("Connection timeout")))
+        val fake = FakeTmdbRepository(searchResult = Result.failure(Exception("Connection timeout")))
         setContent(repository = fake)
         composeTestRule.onNode(hasSetTextAction()).performTextInput("Dune")
         composeTestRule.onNodeWithContentDescription("Search").performClick()
@@ -109,7 +109,7 @@ class TmdbSearchDialogTest {
     @Test
     fun tappingResult_callsOnResultWithCorrectSearchResult() {
         val expected = searchResult(id = 42, title = "Inception")
-        val fake = FakeTmdbRepo(searchResult = Result.success(listOf(expected)))
+        val fake = FakeTmdbRepository(searchResult = Result.success(listOf(expected)))
         var received: TmdbSearchResult? = null
         setContent(repository = fake, onResult = { r, _ -> received = r })
         search(fake, "Inception")
@@ -119,7 +119,7 @@ class TmdbSearchDialogTest {
 
     @Test
     fun tappingResult_callsOnResultWithTrailerUrl_whenTrailerFound() {
-        val fake = FakeTmdbRepo(
+        val fake = FakeTmdbRepository(
             searchResult = Result.success(listOf(searchResult(title = "Oppenheimer"))),
             trailerResult = Result.success("https://www.youtube.com/watch?v=uYPbbksJxIg")
         )
@@ -132,7 +132,7 @@ class TmdbSearchDialogTest {
 
     @Test
     fun tappingResult_callsOnResultWithNullTrailerUrl_whenNoTrailerFound() {
-        val fake = FakeTmdbRepo(
+        val fake = FakeTmdbRepository(
             searchResult = Result.success(listOf(searchResult(title = "Silent Film"))),
             trailerResult = Result.success(null)
         )
@@ -145,16 +145,16 @@ class TmdbSearchDialogTest {
 
     @Test
     fun tappingResult_fetchesTrailerForCorrectMovieId() {
-        val fake = FakeTmdbRepo(searchResult = Result.success(listOf(searchResult(id = 99, title = "Alien"))))
+        val fake = FakeTmdbRepository(searchResult = Result.success(listOf(searchResult(id = 99, title = "Alien"))))
         setContent(repository = fake)
         search(fake, "Alien")
         clickResult("Alien")
-        assertEquals(99, fake.lastTrailerMovieId)
+        assertEquals(99, fake.lastTrailerId)
     }
 
     @Test
     fun tappingResult_callsOnDismiss() {
-        val fake = FakeTmdbRepo(searchResult = Result.success(listOf(searchResult(title = "Gravity"))))
+        val fake = FakeTmdbRepository(searchResult = Result.success(listOf(searchResult(title = "Gravity"))))
         var dismissed = false
         setContent(repository = fake, onDismiss = { dismissed = true })
         search(fake, "Gravity")
@@ -165,7 +165,7 @@ class TmdbSearchDialogTest {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private fun setContent(
-        repository: TmdbRepository = FakeTmdbRepo(),
+        repository: FakeTmdbRepository = FakeTmdbRepository(),
         onDismiss: () -> Unit = {},
         onResult: (TmdbSearchResult, String?) -> Unit = { _, _ -> }
     ) {
@@ -181,7 +181,7 @@ class TmdbSearchDialogTest {
     }
 
     /** Types [query] into the search field and clicks the search icon. */
-    private fun search(fake: FakeTmdbRepo, query: String) {
+    private fun search(fake: FakeTmdbRepository, query: String) {
         composeTestRule.onNode(hasSetTextAction()).performTextInput(query)
         composeTestRule.onNodeWithContentDescription("Search").performClick()
         composeTestRule.waitForIdle()
@@ -209,33 +209,14 @@ class TmdbSearchDialogTest {
         releaseDate: String = "2024-01-01"
     ) = TmdbSearchResult(
         id = id,
+        mediaType = "movie",
         title = title,
+        name = null,
         releaseDate = releaseDate,
+        firstAirDate = null,
         overview = "An overview.",
         posterPath = null,
         voteAverage = 7.5
     )
 }
 
-// ── Fake repository ───────────────────────────────────────────────────────────
-
-private class FakeTmdbRepo(
-    private val searchResult: Result<List<TmdbSearchResult>> = Result.success(emptyList()),
-    private val trailerResult: Result<String?> = Result.success(null)
-) : TmdbRepository {
-
-    var searchCallCount = 0
-    var lastSearchQuery: String? = null
-    var lastTrailerMovieId: Int? = null
-
-    override suspend fun searchMovies(query: String): Result<List<TmdbSearchResult>> {
-        searchCallCount++
-        lastSearchQuery = query
-        return searchResult
-    }
-
-    override suspend fun getTrailerUrl(movieId: Int): Result<String?> {
-        lastTrailerMovieId = movieId
-        return trailerResult
-    }
-}

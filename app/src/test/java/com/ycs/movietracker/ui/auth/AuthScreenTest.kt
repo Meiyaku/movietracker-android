@@ -8,11 +8,13 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.firebase.auth.FirebaseUser
 import com.ycs.movietracker.data.model.MovieList
 import com.ycs.movietracker.data.repository.AuthRepository
 import com.ycs.movietracker.data.repository.MovieListRepository
+import com.ycs.movietracker.test.NoopMovieRepository
 import com.ycs.movietracker.ui.theme.MovietrackerTheme
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -46,7 +48,7 @@ class AuthScreenTest {
     val composeTestRule = createComposeRule()
 
     private fun makeVm(fakeAuthRepo: FakeAuthRepo = FakeAuthRepo()) =
-        AuthViewModel(fakeAuthRepo, FakeMovieListRepo())
+        AuthViewModel(ApplicationProvider.getApplicationContext(), fakeAuthRepo, FakeMovieListRepo(), NoopMovieRepository())
 
     private fun setContent(vm: AuthViewModel = makeVm()) {
         composeTestRule.setContent {
@@ -189,14 +191,16 @@ private class FakeAuthRepo : AuthRepository {
         passwordResetCalled = true
         return Result.success(Unit)
     }
+    override suspend fun deleteAccount(): Result<Unit> = Result.success(Unit)
 }
 
 private class FakeMovieListRepo : MovieListRepository {
-    override fun getLists(uid: String): Flow<List<MovieList>> = emptyFlow()
+    override fun getLists(uid: String): Flow<Result<List<MovieList>>> = emptyFlow()
     override suspend fun createList(uid: String, list: MovieList): Result<String> =
         Result.success("id")
     override suspend fun updateList(uid: String, list: MovieList): Result<Unit> =
         Result.success(Unit)
     override suspend fun deleteList(uid: String, listId: String): Result<Unit> =
         Result.success(Unit)
+    override suspend fun deleteAllLists(uid: String): Result<Unit> = Result.success(Unit)
 }

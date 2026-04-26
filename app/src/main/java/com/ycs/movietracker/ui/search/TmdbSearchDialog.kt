@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Tv
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -41,11 +42,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
+import com.ycs.movietracker.R
 import com.ycs.movietracker.data.model.TmdbSearchResult
 import com.ycs.movietracker.data.repository.TmdbRepository
 import kotlinx.coroutines.launch
@@ -60,6 +62,8 @@ fun TmdbSearchDialog(
     var isSearching by remember { mutableStateOf(false) }
     var results by remember { mutableStateOf<List<TmdbSearchResult>>(emptyList()) }
     var error by remember { mutableStateOf<String?>(null) }
+    var hasSearched by remember { mutableStateOf(false) }
+    var lastQuery by remember { mutableStateOf("") }
     var loadingResultId by remember { mutableStateOf<Int?>(null) }
     val scope = rememberCoroutineScope()
 
@@ -67,11 +71,13 @@ fun TmdbSearchDialog(
         if (query.isBlank() || isSearching) return
         isSearching = true
         error = null
+        lastQuery = query
         scope.launch {
-            repository.searchMovies(query).fold(
+            repository.search(query).fold(
                 onSuccess = { results = it },
                 onFailure = { error = it.message ?: "Search failed" }
             )
+            hasSearched = true
             isSearching = false
         }
     }
@@ -86,7 +92,7 @@ fun TmdbSearchDialog(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Search TMDB",
+                    text = stringResource(R.string.action_search_tmdb),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -101,7 +107,7 @@ fun TmdbSearchDialog(
                         value = query,
                         onValueChange = { query = it },
                         modifier = Modifier.weight(1f),
-                        label = { Text("Movie title") },
+                        label = { Text(stringResource(R.string.placeholder_movie_title)) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = { performSearch() })
@@ -112,7 +118,7 @@ fun TmdbSearchDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Search,
-                            contentDescription = "Search"
+                            contentDescription = stringResource(R.string.cd_search)
                         )
                     }
                 }
@@ -131,9 +137,17 @@ fun TmdbSearchDialog(
                     error != null -> {
                         Text(
                             text = error!!,
+                            style = MaterialTheme.typography.bodySmall,
                             color = Color.Red,
-                            fontSize = 13.sp,
                             modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+                    hasSearched && results.isEmpty() -> {
+                        Text(
+                            text = stringResource(R.string.empty_tmdb_no_results, lastQuery),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(vertical = 16.dp)
                         )
                     }
                     results.isNotEmpty() -> {
@@ -146,7 +160,7 @@ fun TmdbSearchDialog(
                                         .clickable(enabled = loadingResultId == null) {
                                             loadingResultId = result.id
                                             scope.launch {
-                                                val trailerUrl = repository.getTrailerUrl(result.id).getOrNull()
+                                                val trailerUrl = repository.getTrailerUrl(result.id, result.mediaType).getOrNull()
                                                 onResult(result, trailerUrl)
                                                 onDismiss()
                                             }
@@ -160,7 +174,7 @@ fun TmdbSearchDialog(
                                     if (thumbUrl != null) {
                                         AsyncImage(
                                             model = thumbUrl,
-                                            contentDescription = null,
+                                            contentDescription = stringResource(R.string.cd_movie_poster, result.displayTitle),
                                             contentScale = ContentScale.Crop,
                                             modifier = Modifier
                                                 .width(48.dp)
@@ -184,10 +198,17 @@ fun TmdbSearchDialog(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
+                                            if (result.mediaType == "tv") {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Tv,
+                                                    contentDescription = stringResource(R.string.cd_tv_show),
+                                                    modifier = Modifier.size(14.dp),
+                                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                                )
+                                            }
                                             Text(
-                                                text = result.title,
-                                                fontWeight = FontWeight.SemiBold,
-                                                fontSize = 14.sp,
+                                                text = result.displayTitle,
+                                                style = MaterialTheme.typography.titleSmall,
                                                 modifier = Modifier.weight(1f),
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
@@ -198,7 +219,7 @@ fun TmdbSearchDialog(
                                                 result.year?.let {
                                                     Text(
                                                         text = it,
-                                                        fontSize = 13.sp,
+                                                        style = MaterialTheme.typography.bodySmall,
                                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                                     )
                                                 }
@@ -208,7 +229,7 @@ fun TmdbSearchDialog(
                                             Spacer(Modifier.height(2.dp))
                                             Text(
                                                 text = it,
-                                                fontSize = 12.sp,
+                                                style = MaterialTheme.typography.labelMedium,
                                                 maxLines = 3,
                                                 overflow = TextOverflow.Ellipsis,
                                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
@@ -227,7 +248,7 @@ fun TmdbSearchDialog(
                     horizontalArrangement = Arrangement.End
                 ) {
                     TextButton(onClick = onDismiss) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.action_cancel))
                     }
                 }
             }

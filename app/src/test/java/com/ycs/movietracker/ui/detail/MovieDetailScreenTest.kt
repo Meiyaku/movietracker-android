@@ -9,15 +9,19 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.firebase.Timestamp
 import com.ycs.movietracker.data.model.Movie
 import com.ycs.movietracker.data.model.MovieList
+import com.ycs.movietracker.data.model.MoviesPage
+import com.ycs.movietracker.data.model.NewMovie
 import com.ycs.movietracker.data.model.WatchStatus
 import com.ycs.movietracker.data.repository.MovieRepository
+import com.ycs.movietracker.data.repository.RemoteConfigRepository
+import com.ycs.movietracker.test.FakeTmdbRepository
 import com.ycs.movietracker.ui.theme.MovietrackerTheme
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -43,8 +47,17 @@ class MovieDetailScreenTest {
 
     private val fakeRepo = FakeDetailRepo()
 
+    private val fakeRemoteConfig = object : RemoteConfigRepository {
+        override val pageSize = 50
+        override val maxRetryAttempts = 3
+        override val isTmdbSearchEnabled = MutableStateFlow(true)
+        override val tmdbApiKey = MutableStateFlow("")
+    }
+
+    private val fakeTmdbRepo = FakeTmdbRepository()
+
     private fun makeVm(existingMovie: Movie? = null) =
-        MovieDetailViewModel(fakeRepo, uid = "user1", existingMovie = existingMovie)
+        MovieDetailViewModel(fakeRepo, fakeRemoteConfig, fakeTmdbRepo, ApplicationProvider.getApplicationContext(), uid = "user1", movieId = existingMovie?.id ?: "new", existingMovie = existingMovie)
 
     private fun setContent(
         vm: MovieDetailViewModel,
@@ -134,7 +147,7 @@ class MovieDetailScreenTest {
     fun viewMode_fallsBackToMyMovies_whenAllListsEmpty() {
         val movie = watchedMovie(listIds = listOf("list-fav"))
         setContent(vm = makeVm(existingMovie = movie), allLists = emptyList())
-        composeTestRule.onNodeWithText("Lists: My Movies").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Lists: All Movies").assertIsDisplayed()
     }
 
     // ── Edit mode — save button state ─────────────────────────────────────────
@@ -171,7 +184,7 @@ class MovieDetailScreenTest {
     @Test
     fun deleteConfirmDialog_isShown_whenShowDeleteConfirmIsTrue() {
         val vm = makeVm(existingMovie = watchedMovie(title = "Inception"))
-        vm.showDeleteConfirm = true
+        vm.requestDeleteConfirm()
         setContent(vm = vm)
         composeTestRule.onNodeWithText("Delete movie?").assertIsDisplayed()
     }
@@ -215,7 +228,7 @@ class MovieDetailScreenTest {
         id = id,
         title = title,
         status = WatchStatus.WATCHED,
-        rating = 4,
+        rating = 4.0,
         trailerUrl = trailerUrl,
         listIds = listIds,
         createdAt = Timestamp.now()
@@ -236,13 +249,20 @@ class MovieDetailScreenTest {
 // ── Fake repository ───────────────────────────────────────────────────────────
 
 private class FakeDetailRepo : MovieRepository {
-    override fun getMoviesForList(uid: String, listId: String): Flow<List<Movie>> = emptyFlow()
-    override suspend fun addMovie(uid: String, movie: Movie): Result<String> =
-        Result.success("new-id")
+    override suspend fun getMoviesPage(uid: String, listId: String, pageSize: Int, afterId: String?): Result<MoviesPage> =
+        Result.success(MoviesPage(emptyList(), null, false))
+    override suspend fun addMovie(uid: String, movie: NewMovie): Result<Movie> =
+        Result.success(movie.toMovie(id = "new-id"))
     override suspend fun updateMovie(uid: String, movie: Movie): Result<Unit> =
         Result.success(Unit)
     override suspend fun deleteMovie(uid: String, movieId: String): Result<Unit> =
         Result.success(Unit)
     override suspend fun removeListFromMovies(uid: String, listId: String): Result<Unit> =
         Result.success(Unit)
+    override suspend fun getMovieById(uid: String, movieId: String): Result<Movie> =
+        Result.failure(UnsupportedOperationException())
+
+    override suspend fun checkDuplicate(uid: String, title: String, year: Int?, genre: String?, excludeId: String?): Result<Boolean> =
+        Result.success(false)
+    override suspend fun deleteAllMovies(uid: String): Result<Unit> = Result.success(Unit)
 }

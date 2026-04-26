@@ -15,11 +15,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ycs.movietracker.R
+import com.ycs.movietracker.util.AppConfig
 
 @Composable
 fun RenameListDialog(
@@ -44,7 +45,7 @@ fun RenameListDialog(
                 TextField(
                     value = name,
                     onValueChange = {
-                        name = it
+                        name = it.take(AppConfig.MAX_LIST_NAME_LENGTH)
                         if (error != null) onErrorDismissed()
                     },
                     placeholder = { Text(stringResource(R.string.label_list_name)) },
@@ -54,7 +55,7 @@ fun RenameListDialog(
                 )
                 if (error != null) {
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text(text = error, color = Color.Red, fontSize = 13.sp)
+                    Text(text = error, style = MaterialTheme.typography.bodySmall, color = Color.Red)
                 }
                 if (isLoading) {
                     Spacer(modifier = Modifier.height(8.dp))

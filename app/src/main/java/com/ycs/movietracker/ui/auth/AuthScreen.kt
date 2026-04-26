@@ -44,12 +44,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ycs.movietracker.R
+import com.ycs.movietracker.ui.theme.ErrorBackground
+import com.ycs.movietracker.ui.theme.ErrorText
 import com.ycs.movietracker.ui.theme.appColors
 
 @Composable
@@ -75,16 +79,15 @@ fun AuthScreen(viewModel: AuthViewModel) {
         ) {
             // App title
             Text(
-                text = "Movie Tracker",
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
+                text = stringResource(R.string.app_title),
+                style = MaterialTheme.typography.headlineLarge,
                 color = Color.White,
                 letterSpacing = 1.sp
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Your personal movie collection",
-                fontSize = 13.sp,
+                text = stringResource(R.string.app_tagline),
+                style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.7f)
             )
             Spacer(Modifier.height(24.dp))
@@ -98,12 +101,16 @@ fun AuthScreen(viewModel: AuthViewModel) {
             ) {
                 Column {
                     // Tab row
+                    val tabLabels = listOf(
+                        stringResource(R.string.tab_log_in),
+                        stringResource(R.string.tab_sign_up)
+                    )
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp)
                     ) {
-                        listOf("Log In", "Sign Up").forEachIndexed { index, label ->
+                        tabLabels.forEachIndexed { index, label ->
                             val isSelected = selectedTab == index
                             Box(
                                 modifier = Modifier
@@ -118,10 +125,10 @@ fun AuthScreen(viewModel: AuthViewModel) {
                                 ) {
                                     Text(
                                         text = label,
+                                        style = MaterialTheme.typography.bodyMedium,
                                         color = if (isSelected) MaterialTheme.colorScheme.primary
                                         else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                        fontSize = 14.sp
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                                     )
                                 }
                                 if (isSelected) {
@@ -181,8 +188,9 @@ private fun SignUpTab(
     var showPassword by remember { mutableStateOf(false) }
     var showConfirm by remember { mutableStateOf(false) }
 
+    val passwordsDoNotMatch = stringResource(R.string.error_passwords_do_not_match)
     val localError = if (confirmPassword.isNotEmpty() && password != confirmPassword) {
-        "Passwords do not match"
+        passwordsDoNotMatch
     } else null
     val displayError = localError ?: uiState.signUpError
 
@@ -197,13 +205,13 @@ private fun SignUpTab(
         }
 
         AuthField(
-            label = "Email",
+            label = stringResource(R.string.label_email),
             value = email,
             onValueChange = { email = it; onFieldChange() },
             keyboardType = KeyboardType.Email
         )
         AuthField(
-            label = "Password",
+            label = stringResource(R.string.label_password),
             value = password,
             onValueChange = { password = it; onFieldChange() },
             keyboardType = KeyboardType.Password,
@@ -212,7 +220,7 @@ private fun SignUpTab(
             onTogglePasswordVisibility = { showPassword = !showPassword }
         )
         AuthField(
-            label = "Confirm Password",
+            label = stringResource(R.string.label_confirm_password),
             value = confirmPassword,
             onValueChange = { confirmPassword = it; onFieldChange() },
             keyboardType = KeyboardType.Password,
@@ -234,7 +242,7 @@ private fun SignUpTab(
             if (uiState.isLoading) {
                 CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
             } else {
-                Text("Sign Up", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.action_sign_up), style = MaterialTheme.typography.labelLarge, color = Color.White)
             }
         }
     }
@@ -262,13 +270,13 @@ private fun LogInTab(
         }
 
         AuthField(
-            label = "Email",
+            label = stringResource(R.string.label_email),
             value = email,
             onValueChange = { email = it; onFieldChange() },
             keyboardType = KeyboardType.Email
         )
         AuthField(
-            label = "Password",
+            label = stringResource(R.string.label_password),
             value = password,
             onValueChange = { password = it; onFieldChange() },
             keyboardType = KeyboardType.Password,
@@ -283,9 +291,9 @@ private fun LogInTab(
                 contentPadding = PaddingValues(0.dp)
             ) {
                 Text(
-                    "Forgot Password?",
-                    color = MaterialTheme.colorScheme.primary,
-                    fontSize = 12.sp
+                    stringResource(R.string.action_forgot_password),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -302,7 +310,7 @@ private fun LogInTab(
             if (uiState.isLoading) {
                 CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
             } else {
-                Text("Log In", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.action_login), style = MaterialTheme.typography.labelLarge, color = Color.White)
             }
         }
     }
@@ -311,14 +319,14 @@ private fun LogInTab(
 @Composable
 private fun ErrorBox(message: String) {
     Surface(
-        color = Color(0xFFFFEBEE),
+        color = ErrorBackground,
         shape = RoundedCornerShape(8.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Text(
             text = message,
-            color = Color(0xFFB71C1C),
-            fontSize = 13.sp,
+            style = MaterialTheme.typography.bodySmall,
+            color = ErrorText,
             modifier = Modifier.padding(12.dp)
         )
     }
@@ -334,11 +342,12 @@ private fun AuthField(
     passwordVisible: Boolean = false,
     onTogglePasswordVisibility: (() -> Unit)? = null
 ) {
+    val cdHidePassword = stringResource(R.string.cd_hide_password)
+    val cdShowPassword = stringResource(R.string.cd_show_password)
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             text = label,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
+            style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
         )
         OutlinedTextField(
@@ -354,7 +363,7 @@ private fun AuthField(
                     IconButton(onClick = onTogglePasswordVisibility) {
                         Icon(
                             imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                            contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                            contentDescription = if (passwordVisible) cdHidePassword else cdShowPassword,
                             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                         )
                     }
@@ -378,18 +387,18 @@ private fun ForgotPasswordDialog(
 
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Reset Password") },
+        title = { Text(stringResource(R.string.title_reset_password)) },
         text = {
             if (uiState.passwordResetSent) {
-                Text("If an account exists for that email, a reset link has been sent.")
+                Text(stringResource(R.string.msg_reset_link_sent))
             } else {
                 Column {
-                    Text("Enter your email address and we'll send you a reset link.")
+                    Text(stringResource(R.string.msg_reset_instructions))
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(
                         value = email,
                         onValueChange = { email = it },
-                        placeholder = { Text("Email") },
+                        placeholder = { Text(stringResource(R.string.label_email)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         singleLine = true,
                         shape = RoundedCornerShape(8.dp),
@@ -400,7 +409,7 @@ private fun ForgotPasswordDialog(
         },
         confirmButton = {
             if (uiState.passwordResetSent) {
-                TextButton(onClick = onDismiss) { Text("OK") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_ok)) }
             } else {
                 TextButton(
                     onClick = { onSendReset(email) },
@@ -409,14 +418,14 @@ private fun ForgotPasswordDialog(
                     if (uiState.isLoading) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("Send Reset Email")
+                        Text(stringResource(R.string.action_send_reset_email))
                     }
                 }
             }
         },
         dismissButton = {
             if (!uiState.passwordResetSent) {
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
             }
         }
     )

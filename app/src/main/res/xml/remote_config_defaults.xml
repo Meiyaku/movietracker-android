@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<defaultsMap>
+    <entry>
+        <key>page_size</key>
+        <value>0</value>
+    </entry>
+    <entry>
+        <key>max_retry_attempts</key>
+        <value>3</value>
+    </entry>
+    <entry>
+        <key>tmdb_search_enabled</key>
+        <value>true</value>
+    </entry>
+    <entry>
+        <key>tmdb_api_key</key>
+        <value></value>
+    </entry>
+</defaultsMap>

@@ -47,3 +47,17 @@ val StarGoldDark = Color(0xFFFFD700)
 // Auth
 val AuthErrorText = Color(0xFFFFCDD2)
 val AuthErrorTextDark = Color(0xFFEF9A9A)
+
+// Error box (inline error surfaces, e.g. auth screen)
+val ErrorBackground = Color(0xFFFFEBEE)
+val ErrorText = Color(0xFFB71C1C)
+
+// Watch status badge
+val WatchedBadgeText = Color(0xFF1A3D00)
+
+// Offline indicator banner
+val OfflineAmber = Color(0xFFFFA000)
+
+// Drawer header gradient
+val DrawerGradientStart = Color(0xFF1D4ED8)
+val DrawerGradientEnd = Color(0xFF1E3A8A)

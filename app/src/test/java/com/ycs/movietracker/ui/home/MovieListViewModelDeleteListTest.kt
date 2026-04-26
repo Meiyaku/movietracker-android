@@ -1,13 +1,17 @@
 package com.ycs.movietracker.ui.home
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ycs.movietracker.data.model.Movie
 import com.ycs.movietracker.data.model.MovieList
+import com.ycs.movietracker.data.model.MoviesPage
+import com.ycs.movietracker.data.model.NewMovie
 import com.ycs.movietracker.data.repository.MovieListRepository
 import com.ycs.movietracker.data.repository.MovieRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -21,6 +25,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
 
 /**
  * Unit tests for [MovieListViewModel.deleteList] — companion test story US-009-T.
@@ -31,8 +37,12 @@ import org.junit.Test
  *
  * Run with: ./gradlew test
  */
+@RunWith(AndroidJUnit4::class)
+@Config(sdk = [33])
 @OptIn(ExperimentalCoroutinesApi::class)
 class MovieListViewModelDeleteListTest {
+
+    private val context: Context = ApplicationProvider.getApplicationContext()
 
     private val testDispatcher = UnconfinedTestDispatcher()
 
@@ -54,7 +64,7 @@ class MovieListViewModelDeleteListTest {
     ) : MovieListRepository {
         var deleteCallCount = 0
 
-        override fun getLists(uid: String): Flow<List<MovieList>> = flowOf(initialLists)
+        override fun getLists(uid: String): Flow<Result<List<MovieList>>> = flowOf(Result.success(initialLists))
         override suspend fun createList(uid: String, list: MovieList): Result<String> =
             Result.success("id")
         override suspend fun updateList(uid: String, list: MovieList): Result<Unit> =
@@ -63,6 +73,7 @@ class MovieListViewModelDeleteListTest {
             deleteCallCount++
             return deleteResult
         }
+        override suspend fun deleteAllLists(uid: String): Result<Unit> = Result.success(Unit)
     }
 
     private class FakeMovieRepo(
@@ -70,9 +81,10 @@ class MovieListViewModelDeleteListTest {
     ) : MovieRepository {
         var removeCallCount = 0
 
-        override fun getMoviesForList(uid: String, listId: String): Flow<List<Movie>> = emptyFlow()
-        override suspend fun addMovie(uid: String, movie: Movie): Result<String> =
-            Result.success("id")
+        override suspend fun getMoviesPage(uid: String, listId: String, pageSize: Int, afterId: String?): Result<MoviesPage> =
+            Result.success(MoviesPage(emptyList(), null, false))
+        override suspend fun addMovie(uid: String, movie: NewMovie): Result<Movie> =
+            Result.success(movie.toMovie(id = "id"))
         override suspend fun updateMovie(uid: String, movie: Movie): Result<Unit> =
             Result.success(Unit)
         override suspend fun deleteMovie(uid: String, movieId: String): Result<Unit> =
@@ -81,9 +93,14 @@ class MovieListViewModelDeleteListTest {
             removeCallCount++
             return removeResult
         }
+        override suspend fun getMovieById(uid: String, movieId: String): Result<Movie> =
+            Result.failure(UnsupportedOperationException())
+        override suspend fun checkDuplicate(uid: String, title: String, year: Int?, genre: String?, excludeId: String?): Result<Boolean> =
+            Result.success(false)
+        override suspend fun deleteAllMovies(uid: String): Result<Unit> = Result.success(Unit)
     }
 
-    private val myMovies = MovieList(id = "1", name = "My Movies")
+    private val myMovies = MovieList(id = "1", name = "All Movies")
     private val action   = MovieList(id = "2", name = "Action")
     private val sciFi    = MovieList(id = "3", name = "Sci-Fi")
 
@@ -94,7 +111,7 @@ class MovieListViewModelDeleteListTest {
     ): Triple<MovieListViewModel, FakeListRepo, FakeMovieRepo> {
         val listRepo = FakeListRepo(initialLists, deleteResult)
         val movieRepo = FakeMovieRepo(removeResult)
-        val vm = MovieListViewModel(listRepo, movieRepo)
+        val vm = MovieListViewModel(listRepo, movieRepo, context)
         return Triple(vm, listRepo, movieRepo)
     }
 
@@ -133,7 +150,7 @@ class MovieListViewModelDeleteListTest {
         val (vm, _, _) = makeVm()
         vm.loadLists("uid")
         vm.deleteList(action, "uid")
-        assertTrue(vm.deleteListSuccess.value)
+        assertEquals(ListMutationState.Success, vm.deleteState.value)
     }
 
     @Test
@@ -141,7 +158,7 @@ class MovieListViewModelDeleteListTest {
         val (vm, _, _) = makeVm()
         vm.loadLists("uid")
         vm.deleteList(action, "uid")
-        assertFalse(vm.isDeletingList.value)
+        assertFalse(vm.deleteState.value == ListMutationState.Loading)
     }
 
     @Test
@@ -150,12 +167,12 @@ class MovieListViewModelDeleteListTest {
         vm.loadLists("uid")
         vm.selectList(action)
         vm.deleteList(action, "uid")
-        assertEquals("My Movies", vm.activeList.value?.name)
+        assertEquals("All Movies", vm.activeList.value?.name)
     }
 
     @Test
     fun deleteList_success_switchesToFirstRemainingListWhenNoMyMoviesAndActiveDeleted() = runTest {
-        // No "My Movies" in the initial list
+        // No "All Movies" in the initial list
         val list1 = MovieList(id = "2", name = "Action")
         val list2 = MovieList(id = "3", name = "Sci-Fi")
         val (vm, _, _) = makeVm(initialLists = listOf(list1, list2))
@@ -172,7 +189,7 @@ class MovieListViewModelDeleteListTest {
         vm.loadLists("uid")
         vm.selectList(myMovies)
         vm.deleteList(action, "uid")
-        assertEquals("My Movies", vm.activeList.value?.name)
+        assertEquals("All Movies", vm.activeList.value?.name)
     }
 
     @Test
@@ -181,13 +198,13 @@ class MovieListViewModelDeleteListTest {
         val (vm, _, _) = makeVm(removeResult = Result.failure(RuntimeException("fail")))
         vm.loadLists("uid")
         vm.deleteList(action, "uid")
-        assertNotNull("precondition: error should be set", vm.deleteListError.value)
+        assertTrue("precondition: error should be set", vm.deleteState.value is ListMutationState.Error)
 
         // Now a fresh VM that succeeds
         val (vm2, _, _) = makeVm()
         vm2.loadLists("uid")
         vm2.deleteList(action, "uid")
-        assertNull(vm2.deleteListError.value)
+        assertFalse(vm2.deleteState.value is ListMutationState.Error)
     }
 
     // ── failure path ──────────────────────────────────────────────────────────
@@ -197,7 +214,7 @@ class MovieListViewModelDeleteListTest {
         val (vm, _, _) = makeVm(removeResult = Result.failure(RuntimeException("remove failed")))
         vm.loadLists("uid")
         vm.deleteList(action, "uid")
-        assertNotNull(vm.deleteListError.value)
+        assertTrue(vm.deleteState.value is ListMutationState.Error)
     }
 
     @Test
@@ -205,7 +222,7 @@ class MovieListViewModelDeleteListTest {
         val (vm, _, _) = makeVm(removeResult = Result.failure(RuntimeException("fail")))
         vm.loadLists("uid")
         vm.deleteList(action, "uid")
-        assertFalse(vm.deleteListSuccess.value)
+        assertFalse(vm.deleteState.value == ListMutationState.Success)
     }
 
     @Test
@@ -213,7 +230,7 @@ class MovieListViewModelDeleteListTest {
         val (vm, _, _) = makeVm(deleteResult = Result.failure(RuntimeException("delete failed")))
         vm.loadLists("uid")
         vm.deleteList(action, "uid")
-        assertNotNull(vm.deleteListError.value)
+        assertTrue(vm.deleteState.value is ListMutationState.Error)
     }
 
     @Test
@@ -221,7 +238,7 @@ class MovieListViewModelDeleteListTest {
         val (vm, _, _) = makeVm(deleteResult = Result.failure(RuntimeException("fail")))
         vm.loadLists("uid")
         vm.deleteList(action, "uid")
-        assertFalse(vm.deleteListSuccess.value)
+        assertFalse(vm.deleteState.value == ListMutationState.Success)
     }
 
     // ── clearDeleteListSuccess ────────────────────────────────────────────────
@@ -231,8 +248,8 @@ class MovieListViewModelDeleteListTest {
         val (vm, _, _) = makeVm()
         vm.loadLists("uid")
         vm.deleteList(action, "uid")
-        assertTrue("precondition: success should be set", vm.deleteListSuccess.value)
-        vm.clearDeleteListSuccess()
-        assertFalse(vm.deleteListSuccess.value)
+        assertEquals("precondition: success should be set", ListMutationState.Success, vm.deleteState.value)
+        vm.resetDeleteState()
+        assertEquals(ListMutationState.Idle, vm.deleteState.value)
     }
 }

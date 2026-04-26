@@ -72,8 +72,11 @@ class TmdbSearchResultTest {
         posterPath: String? = "/poster.jpg"
     ) = TmdbSearchResult(
         id = 1,
+        mediaType = "movie",
         title = "Test Movie",
+        name = null,
         releaseDate = releaseDate,
+        firstAirDate = null,
         overview = null,
         posterPath = posterPath,
         voteAverage = null

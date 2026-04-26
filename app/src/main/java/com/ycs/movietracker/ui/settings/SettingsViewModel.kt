@@ -1,19 +1,18 @@
 package com.ycs.movietracker.ui.settings
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.ycs.movietracker.data.model.ThemeMode
-import com.ycs.movietracker.data.repository.DataStoreSettingsRepository
 import com.ycs.movietracker.data.repository.SettingsRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class SettingsViewModel(
+@HiltViewModel
+class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
@@ -28,15 +27,5 @@ class SettingsViewModel(
         viewModelScope.launch {
             settingsRepository.setThemeMode(mode)
         }
-    }
-
-    companion object {
-        fun factory(application: Application): ViewModelProvider.Factory =
-            object : ViewModelProvider.Factory {
-                override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    @Suppress("UNCHECKED_CAST")
-                    return SettingsViewModel(DataStoreSettingsRepository(application)) as T
-                }
-            }
     }
 }

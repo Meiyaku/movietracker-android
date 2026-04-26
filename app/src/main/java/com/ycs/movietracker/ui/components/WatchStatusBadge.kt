@@ -11,18 +11,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ycs.movietracker.R
 import com.ycs.movietracker.ui.theme.WantToWatchFill
 import com.ycs.movietracker.ui.theme.WantToWatchStroke
+import com.ycs.movietracker.ui.theme.WatchedBadgeText
 import com.ycs.movietracker.ui.theme.WatchedFill
 import com.ycs.movietracker.ui.theme.WatchedStroke
 
@@ -30,10 +31,11 @@ import com.ycs.movietracker.ui.theme.WatchedStroke
 fun WatchStatusBadge(isWatched: Boolean, modifier: Modifier = Modifier) {
     val fill = if (isWatched) WatchedFill else WantToWatchFill
     val stroke = if (isWatched) WatchedStroke else WantToWatchStroke
-    val textColor = if (isWatched) Color(0xFF1A3D00) else Color.White
+    val textColor = if (isWatched) WatchedBadgeText else Color.White
 
     Row(
         modifier = modifier
+            .semantics(mergeDescendants = true) {}
             .background(fill, RoundedCornerShape(50.dp))
             .border(1.dp, stroke, RoundedCornerShape(50.dp))
             .padding(horizontal = 8.dp, vertical = 2.dp),
@@ -50,8 +52,7 @@ fun WatchStatusBadge(isWatched: Boolean, modifier: Modifier = Modifier) {
         }
         Text(
             text = stringResource(if (isWatched) R.string.status_watched else R.string.status_want_to_watch),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelSmall,
             color = textColor
         )
     }

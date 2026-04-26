@@ -1,21 +1,25 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# ── Debugging ─────────────────────────────────────────────────────────────────
+# Keep source file names and line numbers so crash stack traces are readable
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# ── Gson / Retrofit models ────────────────────────────────────────────────────
+# Gson deserializes these by field name via reflection; R8 must not rename or strip them
+-keep class com.ycs.movietracker.data.model.TmdbSearchResult { *; }
+-keep class com.ycs.movietracker.data.repository.TmdbSearchResponse { *; }
+-keep class com.ycs.movietracker.data.repository.TmdbMovieDto { *; }
+-keep class com.ycs.movietracker.data.repository.TmdbVideosResponse { *; }
+-keep class com.ycs.movietracker.data.repository.TmdbVideoDto { *; }
+-keepclassmembers class * {
+    @com.google.gson.annotations.SerializedName <fields>;
+}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# ── Firebase ──────────────────────────────────────────────────────────────────
+# Prevent R8 from stripping Firebase component registrars (causes "component not present" crash)
+-keep class com.google.firebase.components.ComponentRegistrar
+-keep class * implements com.google.firebase.components.ComponentRegistrar { *; }
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# ── Kotlin ────────────────────────────────────────────────────────────────────
+# Preserve Kotlin metadata used by reflection (coroutines, serialization)
+-keepattributes *Annotation*, Signature, Exception
+-keep class kotlin.Metadata { *; }

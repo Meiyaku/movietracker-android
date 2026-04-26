@@ -1,9 +1,13 @@
 package com.ycs.movietracker.ui.auth
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.firebase.auth.FirebaseUser
 import com.ycs.movietracker.data.model.MovieList
 import com.ycs.movietracker.data.repository.AuthRepository
 import com.ycs.movietracker.data.repository.MovieListRepository
+import com.ycs.movietracker.test.NoopMovieRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -19,6 +23,8 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
 
 /**
  * Unit tests for [AuthViewModel.signOut] — companion test story US-005-T.
@@ -28,6 +34,8 @@ import org.junit.Test
  *
  * Run with: ./gradlew test
  */
+@RunWith(AndroidJUnit4::class)
+@Config(sdk = [33])
 @OptIn(ExperimentalCoroutinesApi::class)
 class AuthViewModelSignOutTest {
 
@@ -57,17 +65,20 @@ class AuthViewModelSignOutTest {
             override fun signOut() { signOutCallCount++ }
             override suspend fun sendPasswordReset(email: String): Result<Unit> =
                 Result.success(Unit)
+            override suspend fun deleteAccount(): Result<Unit> = Result.success(Unit)
         }
         val fakeLists = object : MovieListRepository {
-            override fun getLists(uid: String): Flow<List<MovieList>> = emptyFlow()
+            override fun getLists(uid: String): Flow<Result<List<MovieList>>> = emptyFlow()
             override suspend fun createList(uid: String, list: MovieList): Result<String> =
                 Result.success("list-id")
             override suspend fun updateList(uid: String, list: MovieList): Result<Unit> =
                 Result.success(Unit)
             override suspend fun deleteList(uid: String, listId: String): Result<Unit> =
                 Result.success(Unit)
+            override suspend fun deleteAllLists(uid: String): Result<Unit> = Result.success(Unit)
         }
-        return AuthViewModel(fakeAuth, fakeLists)
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        return AuthViewModel(context, fakeAuth, fakeLists, NoopMovieRepository())
     }
 
     // ── signOut ───────────────────────────────────────────────────────────────

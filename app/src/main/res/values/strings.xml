@@ -1,8 +1,9 @@
 <resources>
-    <string name="app_name">Movie List</string>
-    <string name="hello_name">Hello %s!</string>
+    <string name="app_name">Movie Tracker</string>
 
     <!-- Auth screen -->
+    <string name="app_title">Movie Tracker</string>
+    <string name="app_tagline">Your personal movie collection</string>
     <string name="label_email">Email</string>
     <string name="label_password">Password</string>
     <string name="label_confirm_password">Confirm Password</string>
@@ -14,13 +15,31 @@
     <string name="error_passwords_do_not_match">Passwords do not match</string>
     <string name="error_email_already_exists">An account with this email already exists</string>
     <string name="error_password_too_short">Password must be at least 6 characters</string>
+    <string name="error_invalid_credentials">Incorrect email or password</string>
+    <string name="error_sign_up_failed">Sign up failed. Please try again.</string>
+    <string name="error_sign_in_failed">Sign in failed. Please try again.</string>
+    <string name="cd_hide_password">Hide password</string>
+    <string name="cd_show_password">Show password</string>
+    <string name="title_reset_password">Reset Password</string>
+    <string name="msg_reset_link_sent">If an account exists for that email, a reset link has been sent.</string>
+    <string name="msg_reset_instructions">Enter your email address and we\'ll send you a reset link.</string>
+    <string name="action_ok">OK</string>
+    <string name="action_send_reset_email">Send Reset Email</string>
 
     <!-- Home screen -->
     <string name="app_bar_title">My Movie Tracker</string>
     <string name="cd_open_menu">Open menu</string>
-    <string name="hint_search_movies">Search movies…</string>
+    <string name="cd_more_options">More options</string>
+    <string name="cd_close_dialog">Close</string>
+    <string name="cd_current_list">Current list</string>
+    <string name="cd_tv_show">TV show</string>
+    <string name="hint_search_movies">Search movies &amp; shows…</string>
     <string name="cd_sort_filter">Sort / filter</string>
     <string name="cd_add_movie">Add movie</string>
+    <string name="cd_movie_poster">Movie poster for %1$s</string>
+    <string name="cd_selected">Selected</string>
+    <string name="label_watch_status_summary">%1$d watched · %2$d want to watch</string>
+    <string name="cd_clear_search">Clear search</string>
     <string name="empty_no_movies">No movies yet. Add one!</string>
 
     <!-- Movie Detail screen – view mode -->
@@ -37,13 +56,25 @@
     <string name="status_want_to_watch">Want to Watch</string>
     <string name="label_lists">Lists</string>
     <string name="label_rating">Rating</string>
+    <string name="cd_rating">%1$s out of 5 stars</string>
+    <string name="label_description">Description</string>
+    <string name="label_notes">Notes</string>
+    <string name="action_search_tmdb">Search TMDB</string>
+    <string name="cd_movie_poster_generic">Movie poster</string>
+    <string name="placeholder_description_tmdb">Auto-filled from TMDB search</string>
+    <plurals name="cd_star_button">
+        <item quantity="one">%1$d star</item>
+        <item quantity="other">%1$d stars</item>
+    </plurals>
     <string name="empty_no_movies_search">No movies match your search.</string>
+    <string name="empty_tmdb_no_results">No results found on TMDB for \"%1$s\".</string>
 
     <!-- Movie Detail screen – edit mode -->
     <string name="cd_cancel_edit">Cancel edit</string>
     <string name="cd_delete_movie">Delete movie</string>
     <string name="error_save_movie_failed">Failed to save movie. Please try again.</string>
     <string name="error_delete_movie_failed">Failed to delete movie. Please try again.</string>
+    <string name="error_duplicate_movie">A movie with this title, year, and genre already exists.</string>
     <string name="dialog_title_delete_movie">Delete movie?</string>
     <string name="dialog_msg_delete_movie">Delete \'%1$s\'? This cannot be undone.</string>
 
@@ -52,6 +83,8 @@
     <string name="action_log_out">Log Out</string>
     <string name="action_settings">Settings</string>
     <string name="action_create_list">Create List</string>
+    <string name="label_my_lists">MY LISTS</string>
+    <string name="action_new_list">New List</string>
 
     <!-- Create list dialog -->
     <string name="title_new_list">New List</string>
@@ -59,6 +92,7 @@
     <string name="action_create">Create</string>
     <string name="action_cancel">Cancel</string>
     <string name="error_duplicate_list_name">A list with this name already exists</string>
+    <string name="error_list_name_too_long">List name must be 100 characters or fewer</string>
     <string name="error_create_list_failed">Failed to create list. Please try again.</string>
 
     <!-- Rename list dialog -->
@@ -73,7 +107,15 @@
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
     <string name="theme_system">Follow Device Settings</string>
-    <string name="label_more_settings_coming_soon">More settings coming soon</string>
+    <string name="title_about">About</string>
+    <string name="label_version">Version</string>
+    <string name="label_tmdb_link">Data from The Movie Database</string>
+    <string name="footer_tmdb_attribution">This product uses the TMDB API but is not endorsed or certified by TMDB.</string>
+    <string name="action_delete_account">Delete Account</string>
+    <string name="footer_delete_account">Permanently deletes your account and all movie data. This cannot be undone.</string>
+    <string name="dialog_title_delete_account">Delete Account?</string>
+    <string name="dialog_msg_delete_account">This will permanently delete your account and all your movie data. This cannot be undone.</string>
+    <string name="title_error_delete_account">Couldn\'t Delete Account</string>
 
     <!-- Watch filters -->
     <string name="filter_all">Show All</string>
@@ -88,10 +130,36 @@
     <string name="sort_year_desc">Year (Newest First)</string>
     <string name="sort_rating_desc">Rating (Highest First)</string>
     <string name="sort_rating_asc">Rating (Lowest First)</string>
+    <string name="sort_genre_asc">Genre (A–Z)</string>
+    <string name="sort_genre_desc">Genre (Z–A)</string>
+
+    <!-- TMDB search dialog -->
+    <string name="placeholder_movie_title">Movie or TV show title</string>
+    <string name="cd_search">Search</string>
+
+    <!-- Offline indicator -->
+    <string name="label_offline">You\'re offline</string>
+
+    <!-- Generic error messages (used by FirebaseErrorExtensions.toUserMessage) -->
+    <string name="error_offline">You appear to be offline. Changes will sync when you reconnect.</string>
+    <string name="error_permission_denied">Permission denied. Please sign in again.</string>
+    <string name="error_generic">Something went wrong. Please try again.</string>
+    <string name="error_title_required">Title is required.</string>
+    <string name="error_title_too_long">Title must be 200 characters or fewer.</string>
+    <string name="error_year_invalid">Enter a year between 1888 and %1$d.</string>
+    <string name="error_genre_too_long">Genre must be 50 characters or fewer.</string>
+    <string name="error_url_invalid">Must start with http:// or https://.</string>
+    <string name="error_invalid_email">Please enter a valid email address.</string>
+    <string name="error_auth_network">No internet connection. Please check your connection and try again.</string>
+    <string name="error_reauth_required">Please sign out and sign back in, then try again.</string>
+
+    <!-- Log out confirmation dialog -->
+    <string name="dialog_title_log_out">Log out?</string>
+    <string name="dialog_msg_log_out">Are you sure you want to log out?</string>
 
     <!-- Delete list dialog -->
     <string name="title_delete_list">Delete list?</string>
-    <string name="msg_delete_list_confirm">Delete \'%1$s\'? Movies in this list will remain in My Movies and any other lists they\'re assigned to.</string>
+    <string name="msg_delete_list_confirm">Delete \'%1$s\'? Movies in this list will remain in All Movies and any other lists they\'re assigned to.</string>
     <string name="action_delete">Delete</string>
     <string name="cd_delete_list">Delete list</string>
     <string name="error_delete_list_failed">Failed to delete list. Please try again.</string>

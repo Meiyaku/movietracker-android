@@ -1,15 +1,22 @@
 package com.ycs.movietracker.ui.auth
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.google.firebase.FirebaseNetworkException
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.auth.FirebaseUser
 import com.ycs.movietracker.data.model.MovieList
 import com.ycs.movietracker.data.repository.AuthRepository
 import com.ycs.movietracker.data.repository.MovieListRepository
+import com.ycs.movietracker.test.NoopMovieRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -21,8 +28,10 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
+import org.robolectric.annotation.Config
 
 /**
  * Unit tests for [AuthViewModel.signUp] — companion test story US-002-T.
@@ -33,6 +42,8 @@ import org.mockito.kotlin.whenever
  *
  * Run with: ./gradlew test
  */
+@RunWith(AndroidJUnit4::class)
+@Config(sdk = [33])
 @OptIn(ExperimentalCoroutinesApi::class)
 class AuthViewModelTest {
 
@@ -67,9 +78,10 @@ class AuthViewModelTest {
             override fun signOut() {}
             override suspend fun sendPasswordReset(email: String): Result<Unit> =
                 Result.success(Unit)
+            override suspend fun deleteAccount(): Result<Unit> = Result.success(Unit)
         }
         val fakeLists = object : MovieListRepository {
-            override fun getLists(uid: String): Flow<List<MovieList>> = emptyFlow()
+            override fun getLists(uid: String): Flow<Result<List<MovieList>>> = emptyFlow()
             override suspend fun createList(uid: String, list: MovieList): Result<String> {
                 createdLists += uid to list
                 return Result.success("list-id")
@@ -78,8 +90,10 @@ class AuthViewModelTest {
                 Result.success(Unit)
             override suspend fun deleteList(uid: String, listId: String): Result<Unit> =
                 Result.success(Unit)
+            override suspend fun deleteAllLists(uid: String): Result<Unit> = Result.success(Unit)
         }
-        return AuthViewModel(fakeAuth, fakeLists)
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        return AuthViewModel(context, fakeAuth, fakeLists, NoopMovieRepository())
     }
 
     // ── Password mismatch ────────────────────────────────────────────────────
@@ -116,7 +130,7 @@ class AuthViewModelTest {
         vm.signUp("user@example.com", "password1", "password1")
         assertEquals("Expected exactly one list to be created", 1, createdLists.size)
         assertEquals("uid-123", createdLists[0].first)
-        assertEquals("My Movies", createdLists[0].second.name)
+        assertEquals("All Movies", createdLists[0].second.name)
     }
 
     // ── Firebase error mapping ───────────────────────────────────────────────
@@ -155,6 +169,28 @@ class AuthViewModelTest {
         val vm = makeVm(Result.failure(Exception()))
         vm.signUp("user@example.com", "password1", "password1")
         assertEquals("Sign up failed. Please try again.", vm.uiState.value.signUpError)
+    }
+
+    @Test
+    fun signUp_invalidEmail_showsInvalidEmailError() = runTest {
+        val exception = mock<FirebaseAuthInvalidCredentialsException>()
+        val vm = makeVm(Result.failure(exception))
+        vm.signUp("not-an-email", "password1", "password1")
+        assertEquals(
+            "Please enter a valid email address.",
+            vm.uiState.value.signUpError
+        )
+    }
+
+    @Test
+    fun signUp_networkError_setsNetworkError() = runTest {
+        val exception = mock<FirebaseNetworkException>()
+        val vm = makeVm(Result.failure(exception))
+        vm.signUp("user@example.com", "password1", "password1")
+        assertEquals(
+            "No internet connection. Please check your connection and try again.",
+            vm.uiState.value.signUpError
+        )
     }
 
     // ── clearError ───────────────────────────────────────────────────────────

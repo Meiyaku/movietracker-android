@@ -6,5 +6,7 @@ enum class SortOrder {
     YEAR_ASC,
     YEAR_DESC,
     RATING_ASC,
-    RATING_DESC
+    RATING_DESC,
+    GENRE_ASC,
+    GENRE_DESC
 }

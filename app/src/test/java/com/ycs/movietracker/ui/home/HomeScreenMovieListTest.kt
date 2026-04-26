@@ -146,7 +146,7 @@ class HomeScreenMovieListTest {
     private fun watchedMovie(
         id: String = "m1",
         title: String = "Sample",
-        rating: Int? = 4
+        rating: Double? = 4.0
     ) = Movie(
         id = id,
         title = title,

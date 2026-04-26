@@ -1,34 +1,47 @@
 package com.ycs.movietracker.ui.auth
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
-import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
+import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseAuthWeakPasswordException
+import com.google.firebase.auth.FirebaseUser
+import com.ycs.movietracker.R
 import com.ycs.movietracker.data.model.MovieList
 import com.ycs.movietracker.data.repository.AuthRepository
-import com.ycs.movietracker.data.repository.FirebaseAuthRepository
-import com.ycs.movietracker.data.repository.FirebaseMovieListRepository
 import com.ycs.movietracker.data.repository.MovieListRepository
+import com.ycs.movietracker.data.repository.MovieRepository
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 data class AuthUiState(
     val isLoading: Boolean = false,
     val signUpError: String? = null,
     val signInError: String? = null,
-    val passwordResetSent: Boolean = false
+    val passwordResetSent: Boolean = false,
+    val isDeletingAccount: Boolean = false,
+    val deleteAccountError: String? = null
 )
 
-class AuthViewModel(
-    private val authRepository: AuthRepository = FirebaseAuthRepository(),
-    private val listRepository: MovieListRepository = FirebaseMovieListRepository()
+@HiltViewModel
+class AuthViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val authRepository: AuthRepository,
+    private val listRepository: MovieListRepository,
+    private val movieRepository: MovieRepository
 ) : ViewModel() {
 
     val authState: StateFlow<FirebaseUser?> = authRepository.authStateChanges()
@@ -43,21 +56,31 @@ class AuthViewModel(
 
     fun signUp(email: String, password: String, confirmPassword: String) {
         if (password != confirmPassword) {
-            _uiState.value = _uiState.value.copy(signUpError = "Passwords do not match")
+            _uiState.value = _uiState.value.copy(signUpError = context.getString(R.string.error_passwords_do_not_match))
             return
         }
         _uiState.value = AuthUiState(isLoading = true)
         viewModelScope.launch {
             authRepository.signUp(email, password).fold(
                 onSuccess = { user ->
-                    listRepository.createList(user.uid, MovieList(name = "My Movies"))
+                    val listResult = listRepository.createList(
+                        user.uid, MovieList(name = MovieList.DEFAULT_LIST_NAME)
+                    )
+                    if (listResult.isFailure) {
+                        val msg = listResult.exceptionOrNull()?.message
+                            ?: context.getString(R.string.error_sign_up_failed)
+                        _uiState.value = AuthUiState(signUpError = msg)
+                        return@launch
+                    }
                     _uiState.value = AuthUiState()
                 },
                 onFailure = { e ->
                     val msg = when (e) {
-                        is FirebaseAuthUserCollisionException -> "An account with this email already exists"
-                        is FirebaseAuthWeakPasswordException -> "Password must be at least 6 characters"
-                        else -> e.message ?: "Sign up failed. Please try again."
+                        is FirebaseAuthUserCollisionException -> context.getString(R.string.error_email_already_exists)
+                        is FirebaseAuthWeakPasswordException -> context.getString(R.string.error_password_too_short)
+                        is FirebaseAuthInvalidCredentialsException -> context.getString(R.string.error_invalid_email)
+                        is FirebaseNetworkException -> context.getString(R.string.error_auth_network)
+                        else -> e.message ?: context.getString(R.string.error_sign_up_failed)
                     }
                     _uiState.value = AuthUiState(signUpError = msg)
                 }
@@ -77,8 +100,9 @@ class AuthViewModel(
                 onFailure = { e ->
                     val msg = when (e) {
                         is FirebaseAuthInvalidCredentialsException,
-                        is FirebaseAuthInvalidUserException -> "Incorrect email or password"
-                        else -> e.message ?: "Sign in failed. Please try again."
+                        is FirebaseAuthInvalidUserException -> context.getString(R.string.error_invalid_credentials)
+                        is FirebaseNetworkException -> context.getString(R.string.error_auth_network)
+                        else -> e.message ?: context.getString(R.string.error_sign_in_failed)
                     }
                     _uiState.value = AuthUiState(signInError = msg)
                 }
@@ -108,5 +132,48 @@ class AuthViewModel(
 
     fun clearError() {
         _uiState.value = _uiState.value.copy(signUpError = null, signInError = null)
+    }
+
+    fun deleteAccount() {
+        val uid = authRepository.currentUser?.uid ?: return
+        _uiState.value = _uiState.value.copy(isDeletingAccount = true, deleteAccountError = null)
+        viewModelScope.launch {
+            // Delete Firestore data in parallel first. Auth deletion is intentionally
+            // last — if data deletion fails the account still exists and the user can retry.
+            val (moviesResult, listsResult) = coroutineScope {
+                val m = async { movieRepository.deleteAllMovies(uid) }
+                val l = async { listRepository.deleteAllLists(uid) }
+                m.await() to l.await()
+            }
+            val dataError = moviesResult.exceptionOrNull() ?: listsResult.exceptionOrNull()
+            if (dataError != null) {
+                _uiState.value = _uiState.value.copy(
+                    isDeletingAccount = false,
+                    deleteAccountError = dataError.message ?: context.getString(R.string.error_generic)
+                )
+                return@launch
+            }
+            authRepository.deleteAccount().fold(
+                onSuccess = {
+                    _uiState.value = _uiState.value.copy(isDeletingAccount = false)
+                    // AuthStateListener in MainActivity detects account deletion and navigates to auth screen
+                },
+                onFailure = { e ->
+                    val msg = when (e) {
+                        is FirebaseAuthRecentLoginRequiredException -> context.getString(R.string.error_reauth_required)
+                        is FirebaseNetworkException -> context.getString(R.string.error_auth_network)
+                        else -> e.message ?: context.getString(R.string.error_generic)
+                    }
+                    _uiState.value = _uiState.value.copy(
+                        isDeletingAccount = false,
+                        deleteAccountError = msg
+                    )
+                }
+            )
+        }
+    }
+
+    fun clearDeleteAccountError() {
+        _uiState.value = _uiState.value.copy(deleteAccountError = null)
     }
 }
