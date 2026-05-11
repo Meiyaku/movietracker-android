@@ -6,9 +6,8 @@ import com.ycs.movietracker.util.AppConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import timber.log.Timber
-import javax.inject.Inject
 
-class FirebaseRemoteConfigRepository @Inject constructor(
+class FirebaseRemoteConfigRepository(
     private val remoteConfig: FirebaseRemoteConfig
 ) : RemoteConfigRepository {
 

@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import com.ycs.movietracker.R
 import com.ycs.movietracker.data.model.ThemeMode
 import com.ycs.movietracker.ui.theme.MovietrackerTheme
+import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,7 +62,7 @@ fun SettingsScreen(
     val uriHandler = LocalUriHandler.current
     val appVersion = remember {
         try { context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "—" }
-        catch (e: Exception) { "—" }
+        catch (e: Exception) { Timber.w(e, "Failed to read app version"); "—" }
     }
 
     var showDeleteConfirm by remember { mutableStateOf(false) }

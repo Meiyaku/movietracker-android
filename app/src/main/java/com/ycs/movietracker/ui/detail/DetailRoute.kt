@@ -4,35 +4,34 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.navigation.NavBackStackEntry
+import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 import androidx.navigation.NavHostController
-import com.ycs.movietracker.data.model.MovieList
 import com.ycs.movietracker.ui.auth.AuthViewModel
 import com.ycs.movietracker.ui.home.MovieListViewModel
 import com.ycs.movietracker.ui.home.MovieViewModel
 
 @Composable
 fun DetailRoute(
-    backStackEntry: NavBackStackEntry,
+    movieId: String,
     authViewModel: AuthViewModel,
     movieListViewModel: MovieListViewModel,
     movieViewModel: MovieViewModel,
     navController: NavHostController
 ) {
-    val movieId = backStackEntry.arguments?.getString("movieId") ?: "new"
     val currentUser by authViewModel.authState.collectAsState()
     val uid = currentUser?.uid.orEmpty()
 
     val lists by movieListViewModel.lists.collectAsState()
     val activeList by movieListViewModel.activeList.collectAsState()
 
+    val filteredMovies by movieViewModel.filteredMovies.collectAsState()
     val existingMovie = if (movieId == "new") null
-    else movieViewModel.filteredMovies.value.find { it.id == movieId }
+    else filteredMovies.find { it.id == movieId }
 
-    val detailViewModel = hiltViewModel<MovieDetailViewModel, MovieDetailViewModel.Factory>(
+    val detailViewModel = koinViewModel<MovieDetailViewModel>(
         key = movieId,
-        creationCallback = { factory -> factory.create(uid = uid, movieId = movieId, existingMovie = existingMovie) }
+        parameters = { parametersOf(uid, movieId, existingMovie) }
     )
 
     val detailOperationState by detailViewModel.operationState.collectAsState()
@@ -66,7 +65,11 @@ fun DetailRoute(
         viewModel = detailViewModel,
         allLists = lists,
         onBack = { navController.popBackStack() },
-        onDeleted = { navController.popBackStack() },
+        onDeleted = {
+            movieViewModel.notifyMovieRemoved(movieId)
+            movieViewModel.showDeletedToast()
+            navController.popBackStack()
+        },
         onSaved = { navController.popBackStack() }
     )
 }

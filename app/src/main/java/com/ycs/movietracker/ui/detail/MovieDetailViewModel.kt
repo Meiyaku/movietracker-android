@@ -12,12 +12,8 @@ import com.ycs.movietracker.data.repository.MovieRepository
 import com.ycs.movietracker.data.repository.RemoteConfigRepository
 import com.ycs.movietracker.data.repository.TmdbRepository
 import com.ycs.movietracker.util.AppConfig
-import dagger.assisted.Assisted
-import dagger.hilt.android.qualifiers.ApplicationContext
+import com.ycs.movietracker.util.ConnectivityMonitor
 import timber.log.Timber
-import dagger.assisted.AssistedFactory
-import dagger.assisted.AssistedInject
-import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -70,15 +66,15 @@ data class DraftErrors(
  * [isEditMode] starts true for new movies (edit immediately) and false for existing ones
  * (view mode first).
  */
-@HiltViewModel(assistedFactory = MovieDetailViewModel.Factory::class)
-class MovieDetailViewModel @AssistedInject constructor(
+class MovieDetailViewModel(
     private val movieRepository: MovieRepository,
     private val remoteConfigRepository: RemoteConfigRepository,
     val tmdbRepository: TmdbRepository,
-    @ApplicationContext private val context: Context,
-    @Assisted("uid") private val uid: String,
-    @Assisted("movieId") private val movieId: String,
-    @Assisted("existingMovie") existingMovie: Movie?
+    private val context: Context,
+    private val connectivityMonitor: ConnectivityMonitor,
+    private val uid: String,
+    private val movieId: String,
+    existingMovie: Movie?
 ) : ViewModel() {
 
     var existingMovie: Movie? = existingMovie
@@ -123,15 +119,6 @@ class MovieDetailViewModel @AssistedInject constructor(
                     )
                 }
         }
-    }
-
-    @AssistedFactory
-    interface Factory {
-        fun create(
-            @Assisted("uid") uid: String,
-            @Assisted("movieId") movieId: String,
-            @Assisted("existingMovie") existingMovie: Movie?
-        ): MovieDetailViewModel
     }
 
     // ── Touched field tracking ────────────────────────────────────────────────
@@ -199,11 +186,15 @@ class MovieDetailViewModel @AssistedInject constructor(
     private val _showDeleteConfirm = MutableStateFlow(false)
     val showDeleteConfirm: StateFlow<Boolean> = _showDeleteConfirm.asStateFlow()
 
+    private val _showDuplicateWarning = MutableStateFlow(false)
+    val showDuplicateWarning: StateFlow<Boolean> = _showDuplicateWarning.asStateFlow()
+
     private val _draftErrors = MutableStateFlow(DraftErrors())
     val draftErrors: StateFlow<DraftErrors> = _draftErrors.asStateFlow()
 
     fun requestDeleteConfirm() { _showDeleteConfirm.value = true }
     fun dismissDeleteConfirm() { _showDeleteConfirm.value = false }
+    fun dismissDuplicateWarning() { _showDuplicateWarning.value = false }
 
     /** The full Movie object from the most recent successful save, including the Firestore-assigned ID. */
     private val _lastSavedMovie = MutableStateFlow<Movie?>(null)
@@ -273,6 +264,10 @@ class MovieDetailViewModel @AssistedInject constructor(
     }
 
     fun save() {
+        if (!connectivityMonitor.isOnline) {
+            _operationState.value = DetailOperationState.Error(context.getString(R.string.error_offline))
+            return
+        }
         val d = _draft.value
         val errors = validate(d)
         if (errors.hasErrors) {
@@ -307,47 +302,84 @@ class MovieDetailViewModel @AssistedInject constructor(
                 return@launch
             }
             if (duplicateCheck.getOrDefault(false)) {
-                _operationState.value = DetailOperationState.Error(context.getString(R.string.error_duplicate_movie))
+                _operationState.value = DetailOperationState.Idle
+                _showDuplicateWarning.value = true
                 return@launch
             }
-            if (snapshot == null) {
-                val newMovie = NewMovie(
-                    title = title, year = year, genre = genre, status = status, rating = rating,
-                    description = description, notes = notes, trailerUrl = trailerUrl,
-                    posterUrl = posterUrl, listIds = listIds, createdAt = Timestamp.now()
-                )
-                movieRepository.addMovie(uid, newMovie)
-                    .onSuccess { savedMovie ->
-                        _lastSavedMovie.value = savedMovie
-                        _isEditMode.value = false
-                        _operationState.value = DetailOperationState.SaveSuccess(savedMovie.id)
-                    }
-                    .onFailure {
-                        Timber.e(it, "save failed [uid=$uid]")
-                        _operationState.value = DetailOperationState.Error(it.message ?: context.getString(R.string.error_generic))
-                    }
-            } else {
-                val updatedMovie = Movie(
-                    id = snapshot.id, title = title, year = year, genre = genre,
-                    status = status, rating = rating, description = description, notes = notes,
-                    trailerUrl = trailerUrl, posterUrl = posterUrl, listIds = listIds,
-                    createdAt = snapshot.createdAt
-                )
-                movieRepository.updateMovie(uid, updatedMovie)
-                    .onSuccess {
-                        _lastSavedMovie.value = updatedMovie
-                        _isEditMode.value = false
-                        _operationState.value = DetailOperationState.SaveSuccess(updatedMovie.id)
-                    }
-                    .onFailure {
-                        Timber.e(it, "save failed [uid=$uid, movieId=${snapshot.id}]")
-                        _operationState.value = DetailOperationState.Error(it.message ?: context.getString(R.string.error_generic))
-                    }
-            }
+            performSave(title, year, genre, status, rating, description, notes, trailerUrl, posterUrl, listIds)
+        }
+    }
+
+    fun saveIgnoringDuplicate() {
+        if (!connectivityMonitor.isOnline) {
+            _operationState.value = DetailOperationState.Error(context.getString(R.string.error_offline))
+            return
+        }
+        _showDuplicateWarning.value = false
+        val d = _draft.value
+        val title       = d.title.trim()
+        val year        = d.year.toIntOrNull()
+        val genre       = d.genre.trim().ifEmpty { null }
+        val status      = if (d.isWatched) WatchStatus.WATCHED else WatchStatus.WANT_TO_WATCH
+        val rating      = if (d.isWatched && d.rating > 0) d.rating else null
+        val description = d.description.trim().ifEmpty { null }
+        val notes       = d.notes.trim().ifEmpty { null }
+        val trailerUrl  = d.trailerUrl.trim().ifEmpty { null }
+        val posterUrl   = d.posterUrl.trim().ifEmpty { null }
+        val listIds     = d.selectedListIds.toList()
+        _operationState.value = DetailOperationState.Saving
+        viewModelScope.launch {
+            performSave(title, year, genre, status, rating, description, notes, trailerUrl, posterUrl, listIds)
+        }
+    }
+
+    private suspend fun performSave(
+        title: String, year: Int?, genre: String?, status: WatchStatus, rating: Double?,
+        description: String?, notes: String?, trailerUrl: String?, posterUrl: String?,
+        listIds: List<String>
+    ) {
+        val snapshot = existingMovie
+        if (snapshot == null) {
+            val newMovie = NewMovie(
+                title = title, year = year, genre = genre, status = status, rating = rating,
+                description = description, notes = notes, trailerUrl = trailerUrl,
+                posterUrl = posterUrl, listIds = listIds, createdAt = Timestamp.now()
+            )
+            movieRepository.addMovie(uid, newMovie)
+                .onSuccess { savedMovie ->
+                    _lastSavedMovie.value = savedMovie
+                    _isEditMode.value = false
+                    _operationState.value = DetailOperationState.SaveSuccess(savedMovie.id)
+                }
+                .onFailure {
+                    Timber.e(it, "save failed [uid=$uid]")
+                    _operationState.value = DetailOperationState.Error(it.message ?: context.getString(R.string.error_generic))
+                }
+        } else {
+            val updatedMovie = Movie(
+                id = snapshot.id, title = title, year = year, genre = genre,
+                status = status, rating = rating, description = description, notes = notes,
+                trailerUrl = trailerUrl, posterUrl = posterUrl, listIds = listIds,
+                createdAt = snapshot.createdAt
+            )
+            movieRepository.updateMovie(uid, updatedMovie)
+                .onSuccess {
+                    _lastSavedMovie.value = updatedMovie
+                    _isEditMode.value = false
+                    _operationState.value = DetailOperationState.SaveSuccess(updatedMovie.id)
+                }
+                .onFailure {
+                    Timber.e(it, "save failed [uid=$uid, movieId=${snapshot.id}]")
+                    _operationState.value = DetailOperationState.Error(it.message ?: context.getString(R.string.error_generic))
+                }
         }
     }
 
     fun delete() {
+        if (!connectivityMonitor.isOnline) {
+            _operationState.value = DetailOperationState.Error(context.getString(R.string.error_offline))
+            return
+        }
         val id = existingMovie?.id ?: return
         _operationState.value = DetailOperationState.Deleting
         viewModelScope.launch {

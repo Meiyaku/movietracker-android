@@ -2,7 +2,6 @@ package com.ycs.movietracker.data.repository
 
 import com.google.gson.annotations.SerializedName
 import com.ycs.movietracker.data.model.TmdbSearchResult
-import javax.inject.Inject
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import retrofit2.Retrofit
@@ -85,7 +84,7 @@ class TmdbRepositoryImpl internal constructor(
     baseUrl: String
 ) : TmdbRepository {
 
-    @Inject constructor(remoteConfigRepository: RemoteConfigRepository)
+    constructor(remoteConfigRepository: RemoteConfigRepository)
         : this(remoteConfigRepository, "https://api.themoviedb.org/3/")
 
     private val service: TmdbApiService = Retrofit.Builder()

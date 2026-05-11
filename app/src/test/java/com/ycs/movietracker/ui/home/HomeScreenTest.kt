@@ -1,15 +1,15 @@
 package com.ycs.movietracker.ui.home
 
-import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasProgressBarRangeInfo
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -132,22 +132,15 @@ class HomeScreenTest {
     // ── Loading ───────────────────────────────────────────────────────────────
 
     @Test
-    fun loading_isLoadingMovies_showsProgressIndicator() {
+    fun loading_isLoadingMovies_showsSkeletonGrid() {
         setScreen(isLoadingMovies = true)
-        composeTestRule
-            .onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate))
-            .assertIsDisplayed()
+        composeTestRule.onNodeWithTag("skeletonGrid").assertIsDisplayed()
     }
 
     @Test
-    fun loading_isLoadingLists_showsProgressIndicator() {
+    fun loading_isLoadingLists_showsSkeletonGrid() {
         setScreen(isLoadingLists = true)
-        // isLoadingLists = true renders spinners in both the drawer and the main content;
-        // assert that at least one is displayed rather than requiring a unique match.
-        composeTestRule
-            .onAllNodes(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate))
-            .onFirst()
-            .assertIsDisplayed()
+        composeTestRule.onNodeWithTag("skeletonGrid").assertIsDisplayed()
     }
 
     @Test

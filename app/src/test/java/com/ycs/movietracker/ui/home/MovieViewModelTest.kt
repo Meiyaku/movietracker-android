@@ -7,6 +7,7 @@ import com.ycs.movietracker.data.model.Movie
 import com.ycs.movietracker.data.model.MoviesPage
 import com.ycs.movietracker.data.model.NewMovie
 import com.ycs.movietracker.data.model.SortOrder
+import com.ycs.movietracker.data.model.WatchFilter
 import com.ycs.movietracker.data.model.WatchStatus
 import com.ycs.movietracker.data.repository.MovieRepository
 import com.ycs.movietracker.data.repository.RemoteConfigRepository
@@ -465,6 +466,77 @@ class MovieViewModelTest {
         // After stale-cursor recovery the list should be reloaded from page 1 with no error shown.
         assertEquals(allMovies.size, vm.filteredMovies.value.size)
         assertNull("no snackbar on stale cursor", vm.snackbarMessage.value)
+    }
+
+    // ── WatchFilter ───────────────────────────────────────────────────────────
+
+    private fun watchedMovie(title: String) =
+        Movie(id = title, title = title, status = WatchStatus.WATCHED)
+
+    private fun wantToWatchMovie(title: String) =
+        Movie(id = title, title = title, status = WatchStatus.WANT_TO_WATCH)
+
+    @Test
+    fun setWatchFilter_all_returnsAllMovies() = runTest {
+        val movies = listOf(watchedMovie("A"), wantToWatchMovie("B"), watchedMovie("C"))
+        val vm = makeVm(movies = movies)
+        vm.setWatchFilter(WatchFilter.ALL)
+        assertEquals(3, vm.filteredMovies.value.size)
+    }
+
+    @Test
+    fun setWatchFilter_watched_returnsOnlyWatchedMovies() = runTest {
+        val movies = listOf(watchedMovie("A"), wantToWatchMovie("B"), watchedMovie("C"))
+        val vm = makeVm(movies = movies)
+        vm.setWatchFilter(WatchFilter.WATCHED)
+        val result = vm.filteredMovies.value
+        assertEquals(2, result.size)
+        assertTrue(result.all { it.status == WatchStatus.WATCHED })
+    }
+
+    @Test
+    fun setWatchFilter_wantToWatch_returnsOnlyWantToWatchMovies() = runTest {
+        val movies = listOf(watchedMovie("A"), wantToWatchMovie("B"), wantToWatchMovie("C"))
+        val vm = makeVm(movies = movies)
+        vm.setWatchFilter(WatchFilter.WANT_TO_WATCH)
+        val result = vm.filteredMovies.value
+        assertEquals(2, result.size)
+        assertTrue(result.all { it.status == WatchStatus.WANT_TO_WATCH })
+    }
+
+    @Test
+    fun setWatchFilter_watched_noWatchedMovies_returnsEmpty() = runTest {
+        val movies = listOf(wantToWatchMovie("A"), wantToWatchMovie("B"))
+        val vm = makeVm(movies = movies)
+        vm.setWatchFilter(WatchFilter.WATCHED)
+        assertTrue(vm.filteredMovies.value.isEmpty())
+    }
+
+    @Test
+    fun setWatchFilter_combinedWithSearchQuery_appliesBothFilters() = runTest(testDispatcher) {
+        val movies = listOf(
+            watchedMovie("Matrix"),
+            wantToWatchMovie("Matrix Reloaded"),
+            watchedMovie("Inception")
+        )
+        val vm = makeVm(movies = movies)
+        vm.setWatchFilter(WatchFilter.WATCHED)
+        vm.setSearchQuery("matrix")
+        advanceTimeBy(AppConfig.SEARCH_DEBOUNCE_MS)
+        runCurrent()
+        val result = vm.filteredMovies.value
+        assertEquals(1, result.size)
+        assertEquals("Matrix", result.first().title)
+    }
+
+    @Test
+    fun setWatchFilter_switchingFromWatchedToAll_restoresFullList() = runTest {
+        val movies = listOf(watchedMovie("A"), wantToWatchMovie("B"))
+        val vm = makeVm(movies = movies)
+        vm.setWatchFilter(WatchFilter.WATCHED)
+        assertEquals(1, vm.filteredMovies.value.size)
+        vm.setWatchFilter(WatchFilter.ALL)
+        assertEquals(2, vm.filteredMovies.value.size)
     }
 
     // ── optimistic CRUD ───────────────────────────────────────────────────────

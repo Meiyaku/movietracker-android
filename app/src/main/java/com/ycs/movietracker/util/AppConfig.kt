@@ -30,8 +30,9 @@ object AppConfig {
     const val MAX_FUTURE_YEAR_OFFSET = 5
 
     const val MAX_TITLE_LENGTH = 200
-    const val MAX_GENRE_LENGTH = 50
+    const val MAX_GENRE_LENGTH = 100
     const val MAX_LIST_NAME_LENGTH = 100
+    const val MAX_LIST_SUBTITLE_LENGTH = 30
 
     // ── Pagination ────────────────────────────────────────────────────────────
 

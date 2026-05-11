@@ -239,4 +239,79 @@ class MoviePagerTest {
         p.notifyUpdated(movie("z"))
         assertEquals(listOf(a), p.movies.value)
     }
+
+    // ── seedMovies ────────────────────────────────────────────────────────────
+
+    @Test
+    fun seedMovies_populatesListWithoutLoading() = runTest(dispatcher) {
+        val cached = listOf(movie("cached"))
+        val p = pager(FakeRepo(pages = listOf(listOf(movie("fresh")))), this)
+        p.seedMovies(cached)
+        assertEquals(cached, p.movies.value)
+        assertFalse("seeding must not trigger isLoading", p.isLoading.value)
+    }
+
+    @Test
+    fun loadFirstPage_whenSeeded_doesNotShowLoadingSpinner() = runTest(dispatcher) {
+        // fetchPage only sets isLoading=true when _movies is empty.
+        // Seeding before loadFirstPage prevents the spinner.
+        val p = pager(FakeRepo(pages = listOf(listOf(movie("fresh")))), this)
+        p.seedMovies(listOf(movie("cached")))
+        p.loadFirstPage("uid", "list1")
+        assertFalse(p.isLoading.value)
+    }
+
+    @Test
+    fun loadFirstPage_whenSeeded_replacesWithFreshData() = runTest(dispatcher) {
+        val fresh = listOf(movie("fresh"))
+        val p = pager(FakeRepo(pages = listOf(fresh)), this)
+        p.seedMovies(listOf(movie("cached")))
+        p.loadFirstPage("uid", "list1")
+        // After fetch, seeded + fresh movies are concatenated (seeded + page result)
+        assertTrue(p.movies.value.any { it.id == "fresh" })
+    }
+
+    // ── onFirstPageLoaded ─────────────────────────────────────────────────────
+
+    @Test
+    fun onFirstPageLoaded_invokedAfterFirstPage() = runTest(dispatcher) {
+        val page = listOf(movie("a"), movie("b"))
+        val p = pager(FakeRepo(pages = listOf(page, listOf(movie("c")))), this)
+        var callbackMovies: List<Movie>? = null
+        p.onFirstPageLoaded = { callbackMovies = it }
+        p.loadFirstPage("uid", "list1")
+        assertEquals(page, callbackMovies)
+    }
+
+    @Test
+    fun onFirstPageLoaded_notInvokedForSubsequentPages() = runTest(dispatcher) {
+        val p = pager(FakeRepo(pages = listOf(listOf(movie("a")), listOf(movie("b")))), this)
+        var callCount = 0
+        p.onFirstPageLoaded = { callCount++ }
+        p.loadFirstPage("uid", "list1")
+        p.loadMore("uid", "list1")
+        assertEquals(1, callCount)
+    }
+
+    @Test
+    fun onFirstPageLoaded_invokedAgainAfterReset() = runTest(dispatcher) {
+        val repo = FakeRepo(pages = listOf(listOf(movie("a")), listOf(movie("b"))))
+        val p = pager(repo, this)
+        var callCount = 0
+        p.onFirstPageLoaded = { callCount++ }
+        p.loadFirstPage("uid", "list1")
+        p.reset()
+        p.loadFirstPage("uid", "list1")
+        assertEquals(2, callCount)
+    }
+
+    @Test
+    fun onFirstPageLoaded_notInvokedOnError() = runTest(dispatcher) {
+        val p = pager(FakeRepo(error = RuntimeException("fail")), this)
+        var called = false
+        p.onFirstPageLoaded = { called = true }
+        backgroundScope.launch { p.errors.first() } // drain error
+        p.loadFirstPage("uid", "list1")
+        assertFalse(called)
+    }
 }

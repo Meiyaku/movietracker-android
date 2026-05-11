@@ -1,7 +1,16 @@
 package com.ycs.movietracker.ui.home
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -11,17 +20,21 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import com.ycs.movietracker.R
 import com.ycs.movietracker.data.model.Movie
 import com.ycs.movietracker.data.model.MovieList
@@ -51,28 +64,34 @@ fun HomeScreen(
     onAddMovieClick: () -> Unit = {},
     onLogOut: () -> Unit = {},
     onSettings: () -> Unit = {},
-    onCreateListConfirm: (String) -> Unit = {},
+    onCreateListConfirm: (String, String?, String?) -> Unit = { _, _, _ -> },
     createState: ListMutationState = ListMutationState.Idle,
     onResetCreateState: () -> Unit = {},
-    onRenameListConfirm: (MovieList, String) -> Unit = { _, _ -> },
-    renameState: ListMutationState = ListMutationState.Idle,
-    onResetRenameState: () -> Unit = {},
+    onEditListConfirm: (MovieList, String, String?, String?) -> Unit = { _, _, _, _ -> },
+    editState: ListMutationState = ListMutationState.Idle,
+    onResetEditState: () -> Unit = {},
     onDeleteListConfirm: (MovieList) -> Unit = {},
     deleteState: ListMutationState = ListMutationState.Idle,
     onResetDeleteState: () -> Unit = {},
     onListSelected: (MovieList) -> Unit = {},
     isLoadingLists: Boolean = false,
     isLoadingMovies: Boolean = false,
+    isRefreshing: Boolean = false,
+    onRefresh: () -> Unit = {},
     hasMoreMovies: Boolean = false,
     isLoadingMore: Boolean = false,
     onLoadMore: () -> Unit = {},
     snackbarMessage: String? = null,
-    onSnackbarDismiss: () -> Unit = {}
+    onSnackbarDismiss: () -> Unit = {},
+    showDeletedToast: Boolean = false,
+    onDismissDeletedToast: () -> Unit = {},
+    homeLoadError: String? = null,
+    onRetryLoad: () -> Unit = {}
 ) {
     val isOnline = rememberIsOnline()
     val snackbarHostState = remember { SnackbarHostState() }
     var showCreateListDialog by remember { mutableStateOf(false) }
-    var listToRename by remember { mutableStateOf<MovieList?>(null) }
+    var listToEdit by remember { mutableStateOf<MovieList?>(null) }
     var listToDelete by remember { mutableStateOf<MovieList?>(null) }
     val watchedCount = remember(movies) { movies.count { it.status == WatchStatus.WATCHED } }
     val wantCount = remember(movies) { movies.count { it.status == WatchStatus.WANT_TO_WATCH } }
@@ -84,58 +103,91 @@ fun HomeScreen(
         }
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.appColors.homeBackground,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = {
-            HomeTopBar(
-                lists = lists,
-                activeList = activeList,
+    Box(Modifier.fillMaxSize()) {
+        Scaffold(
+            containerColor = MaterialTheme.appColors.homeBackground,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            topBar = {
+                HomeTopBar(
+                    lists = lists,
+                    activeList = activeList,
+                    isLoadingLists = isLoadingLists,
+                    watchedCount = watchedCount,
+                    wantCount = wantCount,
+                    searchQuery = searchQuery,
+                    onSearchQueryChange = onSearchQueryChange,
+                    sortOrder = sortOrder,
+                    onSortOrderChange = onSortOrderChange,
+                    watchFilter = watchFilter,
+                    onWatchFilterChange = onWatchFilterChange,
+                    onListSelected = onListSelected,
+                    onCreateList = { showCreateListDialog = true },
+                    onEditList = { listToEdit = it },
+                    onDeleteList = { listToDelete = it },
+                    onSettings = onSettings,
+                    onLogOut = onLogOut,
+                    isOnline = isOnline
+                )
+            },
+            floatingActionButton = {
+                FloatingActionButton(
+                    onClick = onAddMovieClick,
+                    containerColor = MaterialTheme.appColors.fabBackground,
+                    contentColor = Color.White,
+                    shape = CircleShape
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = stringResource(R.string.cd_add_movie),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+        ) { innerPadding ->
+            MovieListContent(
+                innerPadding = innerPadding,
+                movies = movies,
                 isLoadingLists = isLoadingLists,
-                watchedCount = watchedCount,
-                wantCount = wantCount,
+                isLoadingMovies = isLoadingMovies,
+                isRefreshing = isRefreshing,
+                onRefresh = onRefresh,
+                hasMoreMovies = hasMoreMovies,
+                isLoadingMore = isLoadingMore,
+                onLoadMore = onLoadMore,
+                onMovieClick = onMovieClick,
                 searchQuery = searchQuery,
-                onSearchQueryChange = onSearchQueryChange,
-                sortOrder = sortOrder,
-                onSortOrderChange = onSortOrderChange,
                 watchFilter = watchFilter,
-                onWatchFilterChange = onWatchFilterChange,
-                onListSelected = onListSelected,
-                onCreateList = { showCreateListDialog = true },
-                onRenameList = { listToRename = it },
-                onDeleteList = { listToDelete = it },
-                onSettings = onSettings,
-                onLogOut = onLogOut,
-                isOnline = isOnline
+                homeLoadError = homeLoadError,
+                onRetryLoad = onRetryLoad
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = onAddMovieClick,
-                containerColor = MaterialTheme.appColors.fabBackground,
-                contentColor = Color.White,
-                shape = CircleShape
+        }
+
+        // "Movie deleted" toast
+        LaunchedEffect(showDeletedToast) {
+            if (showDeletedToast) {
+                delay(2000)
+                onDismissDeletedToast()
+            }
+        }
+        AnimatedVisibility(
+            visible = showDeletedToast,
+            enter = fadeIn() + slideInVertically { it / 2 },
+            exit = fadeOut() + slideOutVertically { it / 2 },
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 88.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.inverseSurface,
+                shadowElevation = 4.dp
             ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = stringResource(R.string.cd_add_movie),
-                    modifier = Modifier.size(24.dp)
+                Text(
+                    text = stringResource(R.string.toast_movie_deleted),
+                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
                 )
             }
         }
-    ) { innerPadding ->
-        MovieListContent(
-            innerPadding = innerPadding,
-            movies = movies,
-            isLoadingLists = isLoadingLists,
-            isLoadingMovies = isLoadingMovies,
-            hasMoreMovies = hasMoreMovies,
-            isLoadingMore = isLoadingMore,
-            onLoadMore = onLoadMore,
-            onMovieClick = onMovieClick,
-            searchQuery = searchQuery,
-            watchFilter = watchFilter
-        )
     }
 
     ListDialogs(
@@ -144,11 +196,11 @@ fun HomeScreen(
         onCreateListConfirm = onCreateListConfirm,
         createState = createState,
         onResetCreateState = onResetCreateState,
-        listToRename = listToRename,
-        onDismissRename = { listToRename = null; onResetRenameState() },
-        onRenameListConfirm = onRenameListConfirm,
-        renameState = renameState,
-        onResetRenameState = onResetRenameState,
+        listToEdit = listToEdit,
+        onDismissEdit = { listToEdit = null; onResetEditState() },
+        onEditListConfirm = onEditListConfirm,
+        editState = editState,
+        onResetEditState = onResetEditState,
         listToDelete = listToDelete,
         onDismissDelete = { listToDelete = null },
         onDeleteListConfirm = onDeleteListConfirm,
@@ -163,14 +215,14 @@ fun HomeScreen(
 private fun ListDialogs(
     showCreateListDialog: Boolean,
     onDismissCreate: () -> Unit,
-    onCreateListConfirm: (String) -> Unit,
+    onCreateListConfirm: (String, String?, String?) -> Unit,
     createState: ListMutationState,
     onResetCreateState: () -> Unit,
-    listToRename: MovieList?,
-    onDismissRename: () -> Unit,
-    onRenameListConfirm: (MovieList, String) -> Unit,
-    renameState: ListMutationState,
-    onResetRenameState: () -> Unit,
+    listToEdit: MovieList?,
+    onDismissEdit: () -> Unit,
+    onEditListConfirm: (MovieList, String, String?, String?) -> Unit,
+    editState: ListMutationState,
+    onResetEditState: () -> Unit,
     listToDelete: MovieList?,
     onDismissDelete: () -> Unit,
     onDeleteListConfirm: (MovieList) -> Unit,
@@ -180,8 +232,8 @@ private fun ListDialogs(
     LaunchedEffect(createState) {
         if (createState == ListMutationState.Success) onDismissCreate()
     }
-    LaunchedEffect(renameState) {
-        if (renameState == ListMutationState.Success) onDismissRename()
+    LaunchedEffect(editState) {
+        if (editState == ListMutationState.Success) onDismissEdit()
     }
     LaunchedEffect(deleteState) {
         if (deleteState == ListMutationState.Success) {
@@ -193,22 +245,24 @@ private fun ListDialogs(
     if (showCreateListDialog) {
         CreateListDialog(
             onDismiss = onDismissCreate,
-            onConfirm = onCreateListConfirm,
+            onConfirm = { name, subtitle, description -> onCreateListConfirm(name, subtitle, description) },
             error = (createState as? ListMutationState.Error)?.message,
             isLoading = createState == ListMutationState.Loading,
             onErrorDismissed = onResetCreateState
         )
     }
 
-    val currentListToRename = listToRename
-    if (currentListToRename != null) {
-        RenameListDialog(
-            originalName = currentListToRename.name,
-            onDismiss = onDismissRename,
-            onConfirm = { newName -> onRenameListConfirm(currentListToRename, newName) },
-            error = (renameState as? ListMutationState.Error)?.message,
-            isLoading = renameState == ListMutationState.Loading,
-            onErrorDismissed = onResetRenameState
+    val currentListToEdit = listToEdit
+    if (currentListToEdit != null) {
+        EditListDialog(
+            list = currentListToEdit,
+            onDismiss = onDismissEdit,
+            onConfirm = { name, subtitle, description ->
+                onEditListConfirm(currentListToEdit, name, subtitle, description)
+            },
+            error = (editState as? ListMutationState.Error)?.message,
+            isLoading = editState == ListMutationState.Loading,
+            onErrorDismissed = onResetEditState
         )
     }
 

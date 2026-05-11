@@ -8,9 +8,8 @@ import android.content.Context
 import com.ycs.movietracker.R
 import com.ycs.movietracker.data.repository.MovieRepository
 import com.ycs.movietracker.util.AppConfig
+import com.ycs.movietracker.util.ConnectivityMonitor
 import com.ycs.movietracker.util.toUserMessage
-import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import timber.log.Timber
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,13 +20,12 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
-@HiltViewModel
-class MovieListViewModel @Inject constructor(
+class MovieListViewModel(
     private val listRepository: MovieListRepository,
     private val movieRepository: MovieRepository,
-    @ApplicationContext private val context: Context
+    private val context: Context,
+    private val connectivityMonitor: ConnectivityMonitor
 ) : ViewModel() {
 
     private val _uid = MutableStateFlow<String?>(null)
@@ -84,10 +82,10 @@ class MovieListViewModel @Inject constructor(
     private val _createState = MutableStateFlow<ListMutationState>(ListMutationState.Idle)
     val createState: StateFlow<ListMutationState> = _createState.asStateFlow()
 
-    // ── Rename ────────────────────────────────────────────────────────────────
+    // ── Edit ─────────────────────────────────────────────────────────────────
 
-    private val _renameState = MutableStateFlow<ListMutationState>(ListMutationState.Idle)
-    val renameState: StateFlow<ListMutationState> = _renameState.asStateFlow()
+    private val _editState = MutableStateFlow<ListMutationState>(ListMutationState.Idle)
+    val editState: StateFlow<ListMutationState> = _editState.asStateFlow()
 
     // ── Delete ────────────────────────────────────────────────────────────────
 
@@ -105,8 +103,12 @@ class MovieListViewModel @Inject constructor(
         _activeList.value = list
     }
 
-    fun createList(name: String, uid: String) {
+    fun createList(name: String, subtitle: String?, description: String?, uid: String) {
         val trimmedName = name.trim()
+        if (!connectivityMonitor.isOnline) {
+            _createState.value = ListMutationState.Error(context.getString(R.string.error_offline))
+            return
+        }
         if (trimmedName.length > AppConfig.MAX_LIST_NAME_LENGTH) {
             _createState.value = ListMutationState.Error(context.getString(R.string.error_list_name_too_long))
             return
@@ -117,9 +119,10 @@ class MovieListViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _createState.value = ListMutationState.Loading
-            val result = listRepository.createList(uid, MovieList(name = trimmedName))
+            val list = MovieList(name = trimmedName, subtitle = subtitle, description = description)
+            val result = listRepository.createList(uid, list)
             result.onSuccess { id ->
-                selectList(MovieList(id = id, name = trimmedName))
+                selectList(MovieList(id = id, name = trimmedName, subtitle = subtitle, description = description))
                 _createState.value = ListMutationState.Success
             }
             result.onFailure {
@@ -131,38 +134,47 @@ class MovieListViewModel @Inject constructor(
 
     fun resetCreateState() { _createState.value = ListMutationState.Idle }
 
-    fun renameList(list: MovieList, newName: String, uid: String) {
-        val trimmedName = newName.trim()
+    fun editList(list: MovieList, name: String, subtitle: String?, description: String?, uid: String) {
+        val trimmedName = name.trim()
+        if (!connectivityMonitor.isOnline) {
+            _editState.value = ListMutationState.Error(context.getString(R.string.error_offline))
+            return
+        }
         if (trimmedName.length > AppConfig.MAX_LIST_NAME_LENGTH) {
-            _renameState.value = ListMutationState.Error(context.getString(R.string.error_list_name_too_long))
+            _editState.value = ListMutationState.Error(context.getString(R.string.error_list_name_too_long))
             return
         }
         val isDuplicate = _lists.value.any {
             it.id != list.id && it.name.trim().equals(trimmedName, ignoreCase = true)
         }
         if (isDuplicate) {
-            _renameState.value = ListMutationState.Error(context.getString(R.string.error_duplicate_list_name))
+            _editState.value = ListMutationState.Error(context.getString(R.string.error_duplicate_list_name))
             return
         }
         viewModelScope.launch {
-            _renameState.value = ListMutationState.Loading
-            val result = listRepository.updateList(uid, list.copy(name = trimmedName))
+            _editState.value = ListMutationState.Loading
+            val updated = list.copy(name = trimmedName, subtitle = subtitle, description = description)
+            val result = listRepository.updateList(uid, updated)
             result.onSuccess {
                 if (_activeList.value?.id == list.id) {
-                    _activeList.value = _activeList.value?.copy(name = trimmedName)
+                    _activeList.value = updated
                 }
-                _renameState.value = ListMutationState.Success
+                _editState.value = ListMutationState.Success
             }
             result.onFailure {
-                Timber.e(it, "renameList failed [uid=$uid, listId=${list.id}]")
-                _renameState.value = ListMutationState.Error(context.getString(R.string.error_rename_list_failed))
+                Timber.e(it, "editList failed [uid=$uid, listId=${list.id}]")
+                _editState.value = ListMutationState.Error(context.getString(R.string.error_edit_list_failed))
             }
         }
     }
 
-    fun resetRenameState() { _renameState.value = ListMutationState.Idle }
+    fun resetEditState() { _editState.value = ListMutationState.Idle }
 
     fun deleteList(list: MovieList, uid: String) {
+        if (!connectivityMonitor.isOnline) {
+            _deleteState.value = ListMutationState.Error(context.getString(R.string.error_offline))
+            return
+        }
         viewModelScope.launch {
             _deleteState.value = ListMutationState.Loading
 

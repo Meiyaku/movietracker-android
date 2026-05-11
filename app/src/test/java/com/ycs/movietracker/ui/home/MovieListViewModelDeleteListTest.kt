@@ -111,7 +111,8 @@ class MovieListViewModelDeleteListTest {
     ): Triple<MovieListViewModel, FakeListRepo, FakeMovieRepo> {
         val listRepo = FakeListRepo(initialLists, deleteResult)
         val movieRepo = FakeMovieRepo(removeResult)
-        val vm = MovieListViewModel(listRepo, movieRepo, context)
+        val onlineMonitor = object : com.ycs.movietracker.util.ConnectivityMonitor { override val isOnline = true }
+        val vm = MovieListViewModel(listRepo, movieRepo, context, onlineMonitor)
         return Triple(vm, listRepo, movieRepo)
     }
 

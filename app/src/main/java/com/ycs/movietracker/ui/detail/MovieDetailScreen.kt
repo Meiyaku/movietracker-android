@@ -2,6 +2,7 @@ package com.ycs.movietracker.ui.detail
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,7 +37,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import com.ycs.movietracker.util.hapticConfirm
+import com.ycs.movietracker.util.hapticReject
 import androidx.compose.ui.unit.dp
 import com.ycs.movietracker.R
 import com.ycs.movietracker.data.model.MovieList
@@ -56,6 +60,7 @@ fun MovieDetailScreen(
     onSaved: () -> Unit = {}
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
+    val view = LocalView.current
     val context = LocalContext.current
     val isOnline = rememberIsOnline()
     val loadState by viewModel.loadState.collectAsState()
@@ -63,6 +68,7 @@ fun MovieDetailScreen(
     val draft by viewModel.draft.collectAsState()
     val operationState by viewModel.operationState.collectAsState()
     val showDeleteConfirm by viewModel.showDeleteConfirm.collectAsState()
+    val showDuplicateWarning by viewModel.showDuplicateWarning.collectAsState()
     val draftErrors by viewModel.draftErrors.collectAsState()
     val isTmdbSearchEnabled by viewModel.isTmdbSearchEnabled.collectAsState()
 
@@ -78,6 +84,7 @@ fun MovieDetailScreen(
     LaunchedEffect(operationState) {
         when (val state = operationState) {
             is DetailOperationState.SaveSuccess -> {
+                view.hapticConfirm()
                 viewModel.resetOperationState()
                 if (viewModel.existingMovie == null) onSaved()
             }
@@ -86,6 +93,7 @@ fun MovieDetailScreen(
                 onDeleted()
             }
             is DetailOperationState.Error -> {
+                view.hapticReject()
                 snackbarHostState.showSnackbar(state.message)
                 viewModel.resetOperationState()
             }
@@ -108,9 +116,28 @@ fun MovieDetailScreen(
                     onSave = { viewModel.save() }
                 )
             } else {
+                val movie = viewModel.existingMovie
                 ViewModeTopBar(
                     onBack = onBack,
-                    onEdit = { viewModel.enterEditMode() }
+                    onEdit = { viewModel.enterEditMode() },
+                    onShare = if (movie != null) {
+                        {
+                            val shareText = buildString {
+                                append(movie.title)
+                                movie.year?.let { append(" ($it)") }
+                                movie.genre?.takeIf { it.isNotBlank() }?.let { append(" · $it") }
+                            }
+                            context.startActivity(
+                                Intent.createChooser(
+                                    Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, shareText)
+                                    },
+                                    null
+                                )
+                            )
+                        }
+                    } else null
                 )
             }
         }
@@ -185,6 +212,24 @@ fun MovieDetailScreen(
         }
     }
 
+    if (showDuplicateWarning) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissDuplicateWarning() },
+            title = { Text(stringResource(R.string.dialog_title_duplicate_movie)) },
+            text = { Text(stringResource(R.string.dialog_msg_duplicate_movie)) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.saveIgnoringDuplicate() }) {
+                    Text(stringResource(R.string.action_save_anyway))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissDuplicateWarning() }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            }
+        )
+    }
+
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { viewModel.dismissDeleteConfirm() },
@@ -219,7 +264,7 @@ fun MovieDetailScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ViewModeTopBar(onBack: () -> Unit, onEdit: () -> Unit) {
+private fun ViewModeTopBar(onBack: () -> Unit, onEdit: () -> Unit, onShare: (() -> Unit)? = null) {
     TopAppBar(
         title = {},
         navigationIcon = {
@@ -232,6 +277,15 @@ private fun ViewModeTopBar(onBack: () -> Unit, onEdit: () -> Unit) {
             }
         },
         actions = {
+            if (onShare != null) {
+                IconButton(onClick = onShare) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = stringResource(R.string.cd_share_movie),
+                        tint = MaterialTheme.appColors.homeTopBarContent
+                    )
+                }
+            }
             TextButton(onClick = onEdit) {
                 Text(
                     text = stringResource(R.string.action_edit),

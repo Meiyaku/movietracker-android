@@ -15,9 +15,8 @@ import com.ycs.movietracker.util.AppConfig
 import com.ycs.movietracker.util.retryWithBackoff
 import timber.log.Timber
 import kotlinx.coroutines.tasks.await
-import javax.inject.Inject
 
-class FirebaseMovieRepository @Inject constructor(
+class FirebaseMovieRepository(
     private val firestore: FirebaseFirestore,
     private val remoteConfigRepository: RemoteConfigRepository
 ) : MovieRepository {

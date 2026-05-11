@@ -8,31 +8,32 @@ import com.ycs.movietracker.data.model.SortOrder
 import com.ycs.movietracker.data.model.WatchFilter
 import com.ycs.movietracker.data.model.WatchStatus
 import android.content.Context
+import com.ycs.movietracker.data.cache.MovieCacheService
+import com.ycs.movietracker.data.cache.NoOpMovieCacheService
 import com.ycs.movietracker.data.repository.MovieRepository
 import com.ycs.movietracker.data.repository.RemoteConfigRepository
-import com.ycs.movietracker.di.DefaultDispatcher
 import com.ycs.movietracker.util.AppConfig
 import com.ycs.movietracker.util.toUserMessage
-import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import timber.log.Timber
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.dropWhile
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
-@HiltViewModel
-class MovieViewModel @Inject constructor(
+class MovieViewModel(
     private val movieRepository: MovieRepository,
-    @ApplicationContext private val context: Context,
+    private val context: Context,
     private val remoteConfigRepository: RemoteConfigRepository,
-    @DefaultDispatcher private val computationDispatcher: CoroutineDispatcher
+    private val computationDispatcher: CoroutineDispatcher,
+    private val cache: MovieCacheService = NoOpMovieCacheService
 ) : ViewModel() {
 
     private val _uid = MutableStateFlow<String?>(null)
@@ -48,6 +49,15 @@ class MovieViewModel @Inject constructor(
     val watchFilter = MutableStateFlow(WatchFilter.ALL)
 
     val snackbarMessage = MutableStateFlow<String?>(null)
+
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
+    private val _showDeletedToast = MutableStateFlow(false)
+    val showDeletedToast: StateFlow<Boolean> = _showDeletedToast.asStateFlow()
+
+    private val _homeLoadError = MutableStateFlow<String?>(null)
+    val homeLoadError: StateFlow<String?> = _homeLoadError.asStateFlow()
 
     internal val pager = MoviePager(movieRepository, viewModelScope)
 
@@ -78,21 +88,50 @@ class MovieViewModel @Inject constructor(
     )
 
     init {
+        // Wire up pager callback to save the first page of each session to cache.
+        pager.onFirstPageLoaded = { movies ->
+            val uid = _uid.value
+            val listId = _activeListId.value
+            if (uid != null && listId != null) cache.save(movies, uid, listId)
+        }
+
         // Reset pager and reload whenever the uid or active list changes.
         viewModelScope.launch {
             combine(_uid, _activeListId) { uid, listId -> uid to listId }
                 .collect { (uid, listId) ->
+                    _homeLoadError.value = null
                     pager.reset(remoteConfigRepository.pageSize)
                     if (!uid.isNullOrBlank() && listId != null) {
+                        val cached = cache.load(uid, listId)
+                        if (cached.isNotEmpty()) pager.seedMovies(cached)
                         pager.loadFirstPage(uid, listId)
                     }
                 }
         }
-        // Forward pager errors to the snackbar.
+        // If the initial load fails (no movies yet) surface a retry UI; otherwise use snackbar.
         viewModelScope.launch {
             pager.errors.collect { error ->
-                snackbarMessage.value = error.toUserMessage(context)
+                if (pager.movies.value.isEmpty()) {
+                    _homeLoadError.value = error.toUserMessage(context)
+                } else {
+                    snackbarMessage.value = error.toUserMessage(context)
+                }
             }
+        }
+    }
+
+    fun refresh() {
+        val uid = _uid.value ?: return
+        val listId = _activeListId.value ?: return
+        if (_isRefreshing.value) return
+        _isRefreshing.value = true
+        cache.invalidate(uid, listId)
+        pager.reset(remoteConfigRepository.pageSize)
+        pager.loadFirstPage(uid, listId)
+        // isLoading goes false→true (fetchPage starts)→false (fetchPage ends); clear refreshing on trailing false
+        viewModelScope.launch {
+            pager.isLoading.dropWhile { !it }.first { !it }
+            _isRefreshing.value = false
         }
     }
 
@@ -110,7 +149,10 @@ class MovieViewModel @Inject constructor(
         val uid = _uid.value ?: return
         viewModelScope.launch {
             movieRepository.addMovie(uid, movie)
-                .onSuccess { savedMovie -> pager.notifyAdded(savedMovie) }
+                .onSuccess { savedMovie ->
+                    _activeListId.value?.let { cache.invalidate(uid, it) }
+                    pager.notifyAdded(savedMovie)
+                }
                 .onFailure {
                     Timber.e(it, "addMovie failed")
                     snackbarMessage.value = it.toUserMessage(context)
@@ -122,7 +164,10 @@ class MovieViewModel @Inject constructor(
         val uid = _uid.value ?: return
         viewModelScope.launch {
             movieRepository.updateMovie(uid, movie)
-                .onSuccess { pager.notifyUpdated(movie) }
+                .onSuccess {
+                    _activeListId.value?.let { cache.invalidate(uid, it) }
+                    pager.notifyUpdated(movie)
+                }
                 .onFailure {
                     Timber.e(it, "updateMovie failed [movieId=${movie.id}]")
                     snackbarMessage.value = it.toUserMessage(context)
@@ -134,7 +179,10 @@ class MovieViewModel @Inject constructor(
         val uid = _uid.value ?: return
         viewModelScope.launch {
             movieRepository.deleteMovie(uid, movieId)
-                .onSuccess { pager.notifyRemoved(movieId) }
+                .onSuccess {
+                    _activeListId.value?.let { cache.invalidate(uid, it) }
+                    pager.notifyRemoved(movieId)
+                }
                 .onFailure {
                     Timber.e(it, "deleteMovie failed [movieId=$movieId]")
                     snackbarMessage.value = it.toUserMessage(context)
@@ -142,8 +190,32 @@ class MovieViewModel @Inject constructor(
         }
     }
 
-    fun notifyMovieAdded(movie: Movie) = pager.notifyAdded(movie)
-    fun notifyMovieUpdated(movie: Movie) = pager.notifyUpdated(movie)
+    fun notifyMovieAdded(movie: Movie) {
+        _uid.value?.let { uid -> _activeListId.value?.let { cache.invalidate(uid, it) } }
+        pager.notifyAdded(movie)
+    }
+
+    fun notifyMovieUpdated(movie: Movie) {
+        _uid.value?.let { uid -> _activeListId.value?.let { cache.invalidate(uid, it) } }
+        pager.notifyUpdated(movie)
+    }
+
+    fun notifyMovieRemoved(movieId: String) {
+        _uid.value?.let { uid -> _activeListId.value?.let { cache.invalidate(uid, it) } }
+        pager.notifyRemoved(movieId)
+    }
+
+    fun showDeletedToast() { _showDeletedToast.value = true }
+    fun clearDeletedToast() { _showDeletedToast.value = false }
+
+    fun clearHomeLoadError() { _homeLoadError.value = null }
+    fun retryLoad() {
+        val uid = _uid.value ?: return
+        val listId = _activeListId.value ?: return
+        _homeLoadError.value = null
+        pager.reset(remoteConfigRepository.pageSize)
+        pager.loadFirstPage(uid, listId)
+    }
 
     fun clearSnackbarMessage() { snackbarMessage.value = null }
 }
@@ -166,4 +238,6 @@ private fun applySort(movies: List<Movie>, order: SortOrder): List<Movie> = when
     SortOrder.RATING_DESC -> movies.sortWithNullsLast(ascending = false) { it.rating }
     SortOrder.GENRE_ASC -> movies.sortWithNullsLast(ascending = true) { it.genre?.lowercase() }
     SortOrder.GENRE_DESC -> movies.sortWithNullsLast(ascending = false) { it.genre?.lowercase() }
+    SortOrder.CREATED_ASC -> movies.sortedBy { it.createdAt.seconds }
+    SortOrder.CREATED_DESC -> movies.sortedByDescending { it.createdAt.seconds }
 }

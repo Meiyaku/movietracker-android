@@ -1,6 +1,7 @@
 package com.ycs.movietracker.ui.auth
 
 import android.content.Context
+import android.util.Patterns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.FirebaseNetworkException
@@ -17,15 +18,12 @@ import com.ycs.movietracker.data.repository.MovieListRepository
 import com.ycs.movietracker.data.repository.MovieRepository
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 data class AuthUiState(
     val isLoading: Boolean = false,
@@ -36,9 +34,8 @@ data class AuthUiState(
     val deleteAccountError: String? = null
 )
 
-@HiltViewModel
-class AuthViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
+class AuthViewModel(
+    private val context: Context,
     private val authRepository: AuthRepository,
     private val listRepository: MovieListRepository,
     private val movieRepository: MovieRepository
@@ -55,6 +52,10 @@ class AuthViewModel @Inject constructor(
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
     fun signUp(email: String, password: String, confirmPassword: String) {
+        if (!Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) {
+            _uiState.value = _uiState.value.copy(signUpError = context.getString(R.string.error_invalid_email))
+            return
+        }
         if (password != confirmPassword) {
             _uiState.value = _uiState.value.copy(signUpError = context.getString(R.string.error_passwords_do_not_match))
             return
@@ -89,6 +90,10 @@ class AuthViewModel @Inject constructor(
     }
 
     fun signIn(email: String, password: String) {
+        if (!Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) {
+            _uiState.value = _uiState.value.copy(signInError = context.getString(R.string.error_invalid_email))
+            return
+        }
         _uiState.value = AuthUiState(isLoading = true)
         viewModelScope.launch {
             authRepository.signIn(email, password).fold(

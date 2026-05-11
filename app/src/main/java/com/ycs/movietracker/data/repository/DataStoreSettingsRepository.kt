@@ -7,8 +7,6 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.ycs.movietracker.data.model.ThemeMode
-import dagger.hilt.android.qualifiers.ApplicationContext
-import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -18,7 +16,7 @@ class DataStoreSettingsRepository internal constructor(
     private val dataStore: DataStore<Preferences>
 ) : SettingsRepository {
 
-    @Inject constructor(@ApplicationContext context: Context) : this(context.settingsDataStore)
+    constructor(context: Context) : this(context.settingsDataStore)
 
     private val themeModeKey = stringPreferencesKey("theme_mode")
 

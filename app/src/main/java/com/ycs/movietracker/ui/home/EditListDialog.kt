@@ -38,11 +38,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.ycs.movietracker.R
+import com.ycs.movietracker.data.model.MovieList
 import com.ycs.movietracker.util.AppConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateListDialog(
+fun EditListDialog(
+    list: MovieList,
     onDismiss: () -> Unit,
     onConfirm: (name: String, subtitle: String?, description: String?) -> Unit,
     error: String? = null,
@@ -51,9 +53,9 @@ fun CreateListDialog(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    var name by remember { mutableStateOf("") }
-    var subtitle by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(list.name) }
+    var subtitle by remember { mutableStateOf(list.subtitle ?: "") }
+    var description by remember { mutableStateOf(list.description ?: "") }
 
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
@@ -78,7 +80,7 @@ fun CreateListDialog(
                 .navigationBarsPadding()
         ) {
             Text(
-                text = stringResource(R.string.title_new_list),
+                text = stringResource(R.string.title_edit_list),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(bottom = 24.dp)
@@ -101,7 +103,7 @@ fun CreateListDialog(
                     .fillMaxWidth()
                     .focusRequester(focusRequester),
                 singleLine = true,
-                enabled = !isLoading,
+                enabled = !isLoading && !list.isDefault,
                 isError = error != null,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 shape = RoundedCornerShape(12.dp)
@@ -188,7 +190,7 @@ fun CreateListDialog(
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text(stringResource(R.string.action_create))
+                        Text(stringResource(R.string.action_save))
                     }
                 }
             }

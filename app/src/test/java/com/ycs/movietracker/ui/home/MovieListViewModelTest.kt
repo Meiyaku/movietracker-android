@@ -78,7 +78,8 @@ class MovieListViewModelTest {
                 Result.success(Unit)
             override suspend fun deleteAllLists(uid: String): Result<Unit> = Result.success(Unit)
         }
-        return MovieListViewModel(fakeRepo, noopMovieRepo, context)
+        val onlineMonitor = object : com.ycs.movietracker.util.ConnectivityMonitor { override val isOnline = true }
+        return MovieListViewModel(fakeRepo, noopMovieRepo, context, onlineMonitor)
     }
 
     // ── sort() ───────────────────────────────────────────────────────────────

@@ -45,6 +45,9 @@ internal class MoviePager(
     private var cursor: String? = null
     private var pageSize: Int = DEFAULT_PAGE_SIZE
 
+    /** Invoked on the calling coroutine's dispatcher after the first page of a new session loads. */
+    var onFirstPageLoaded: ((List<Movie>) -> Unit)? = null
+
     companion object {
         const val DEFAULT_PAGE_SIZE = 20
     }
@@ -58,6 +61,15 @@ internal class MoviePager(
         cursor = null
         _hasMore.value = false
         pageSize = newPageSize
+    }
+
+    /**
+     * Pre-populates the movie list with cached data so the UI renders immediately
+     * without a loading spinner while the first network page is fetched.
+     * Must be called after [reset] and before [loadFirstPage].
+     */
+    fun seedMovies(movies: List<Movie>) {
+        _movies.value = movies
     }
 
     /** Loads the first page for [uid]/[listId]. Resets state before fetching. */
@@ -82,13 +94,15 @@ internal class MoviePager(
      * from page 1 — safe because the retry always uses `cursor = null`.
      */
     private suspend fun fetchPage(uid: String, listId: String) {
+        val isFirstPage = cursor == null
         if (_movies.value.isEmpty()) _isLoading.value = true
         val result = repository.getMoviesPage(uid, listId, pageSize, cursor)
         _isLoading.value = false
         result.onSuccess { page ->
             cursor = page.lastId
             _hasMore.value = page.hasMore && page.movies.isNotEmpty()
-            _movies.value = _movies.value + page.movies
+            _movies.value = if (isFirstPage) page.movies else _movies.value + page.movies
+            if (isFirstPage) onFirstPageLoaded?.invoke(_movies.value)
         }.onFailure { error ->
             if (error is StaleCursorException) {
                 Timber.w("Stale pagination cursor — restarting from page 1")

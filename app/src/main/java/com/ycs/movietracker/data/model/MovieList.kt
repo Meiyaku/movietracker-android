@@ -5,6 +5,8 @@ import com.google.firebase.Timestamp
 data class MovieList(
     val id: String = "",
     val name: String = "",
+    val subtitle: String? = null,
+    val description: String? = null,
     val createdAt: Timestamp = Timestamp.now()
 ) {
     val isDefault: Boolean get() = name == DEFAULT_LIST_NAME

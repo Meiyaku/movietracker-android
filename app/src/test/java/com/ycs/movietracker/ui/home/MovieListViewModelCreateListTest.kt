@@ -95,7 +95,8 @@ class MovieListViewModelCreateListTest {
         createResult: Result<String> = Result.success("new-id")
     ): Pair<MovieListViewModel, FakeRepo> {
         val repo = FakeRepo(initialLists, createResult)
-        val vm = MovieListViewModel(repo, noopMovieRepo, context)
+        val onlineMonitor = object : com.ycs.movietracker.util.ConnectivityMonitor { override val isOnline = true }
+        val vm = MovieListViewModel(repo, noopMovieRepo, context, onlineMonitor)
         return vm to repo
     }
 
@@ -106,7 +107,7 @@ class MovieListViewModelCreateListTest {
         val existing = listOf(MovieList(id = "1", name = "Action"))
         val (vm, _) = makeVm(initialLists = existing)
         vm.loadLists("uid")
-        vm.createList("Action", "uid")
+        vm.createList("Action", null, null, "uid")
         assertEquals("A list with this name already exists", (vm.createState.value as ListMutationState.Error).message)
     }
 
@@ -115,7 +116,7 @@ class MovieListViewModelCreateListTest {
         val existing = listOf(MovieList(id = "1", name = "Action"))
         val (vm, _) = makeVm(initialLists = existing)
         vm.loadLists("uid")
-        vm.createList("action", "uid")
+        vm.createList("action", null, null, "uid")
         assertEquals("A list with this name already exists", (vm.createState.value as ListMutationState.Error).message)
     }
 
@@ -124,7 +125,7 @@ class MovieListViewModelCreateListTest {
         val existing = listOf(MovieList(id = "1", name = "Action"))
         val (vm, repo) = makeVm(initialLists = existing)
         vm.loadLists("uid")
-        vm.createList("Action", "uid")
+        vm.createList("Action", null, null, "uid")
         assertEquals(0, repo.createCallCount)
     }
 
@@ -133,7 +134,7 @@ class MovieListViewModelCreateListTest {
         val existing = listOf(MovieList(id = "1", name = "Action"))
         val (vm, _) = makeVm(initialLists = existing)
         vm.loadLists("uid")
-        vm.createList("  Action  ", "uid")
+        vm.createList("  Action  ", null, null, "uid")
         assertEquals("A list with this name already exists", (vm.createState.value as ListMutationState.Error).message)
     }
 
@@ -142,28 +143,28 @@ class MovieListViewModelCreateListTest {
     @Test
     fun createList_uniqueName_callsRepository() = runTest {
         val (vm, repo) = makeVm()
-        vm.createList("New List", "uid")
+        vm.createList("New List", null, null, "uid")
         assertEquals(1, repo.createCallCount)
     }
 
     @Test
     fun createList_uniqueName_passesCorrectNameToRepository() = runTest {
         val (vm, repo) = makeVm()
-        vm.createList("  My List  ", "uid")
+        vm.createList("  My List  ", null, null, "uid")
         assertEquals("My List", repo.lastCreatedList?.name)
     }
 
     @Test
     fun createList_success_selectsNewListById() = runTest {
         val (vm, _) = makeVm(createResult = Result.success("returned-id"))
-        vm.createList("New List", "uid")
+        vm.createList("New List", null, null, "uid")
         assertEquals("returned-id", vm.activeList.value?.id)
     }
 
     @Test
     fun createList_success_setsCreateListSuccess() = runTest {
         val (vm, _) = makeVm()
-        vm.createList("New List", "uid")
+        vm.createList("New List", null, null, "uid")
         assertEquals(ListMutationState.Success, vm.createState.value)
     }
 
@@ -173,17 +174,17 @@ class MovieListViewModelCreateListTest {
         val (vm, _) = makeVm(initialLists = existing)
         vm.loadLists("uid")
         // First, produce a duplicate error
-        vm.createList("Action", "uid")
+        vm.createList("Action", null, null, "uid")
         assertTrue("precondition: error should be set", vm.createState.value is ListMutationState.Error)
         // Now create with a unique name — state should change to Success (not Error)
-        vm.createList("Drama", "uid")
+        vm.createList("Drama", null, null, "uid")
         assertFalse(vm.createState.value is ListMutationState.Error)
     }
 
     @Test
     fun createList_success_isCreatingListReturnsFalseAfterCompletion() = runTest {
         val (vm, _) = makeVm()
-        vm.createList("New List", "uid")
+        vm.createList("New List", null, null, "uid")
         assertFalse(vm.createState.value == ListMutationState.Loading)
     }
 
@@ -192,14 +193,14 @@ class MovieListViewModelCreateListTest {
     @Test
     fun createList_repositoryFailure_setsGenericError() = runTest {
         val (vm, _) = makeVm(createResult = Result.failure(RuntimeException("Firestore error")))
-        vm.createList("New List", "uid")
+        vm.createList("New List", null, null, "uid")
         assertTrue(vm.createState.value is ListMutationState.Error)
     }
 
     @Test
     fun createList_repositoryFailure_doesNotSetSuccess() = runTest {
         val (vm, _) = makeVm(createResult = Result.failure(RuntimeException("fail")))
-        vm.createList("New List", "uid")
+        vm.createList("New List", null, null, "uid")
         assertFalse(vm.createState.value == ListMutationState.Success)
     }
 
@@ -210,7 +211,7 @@ class MovieListViewModelCreateListTest {
         val existing = listOf(MovieList(id = "1", name = "Action"))
         val (vm, _) = makeVm(initialLists = existing)
         vm.loadLists("uid")
-        vm.createList("Action", "uid")
+        vm.createList("Action", null, null, "uid")
         assertTrue("precondition: error should be set", vm.createState.value is ListMutationState.Error)
         vm.resetCreateState()
         assertEquals(ListMutationState.Idle, vm.createState.value)
@@ -219,9 +220,32 @@ class MovieListViewModelCreateListTest {
     @Test
     fun clearCreateListSuccess_clearsSuccess() = runTest {
         val (vm, _) = makeVm()
-        vm.createList("New List", "uid")
+        vm.createList("New List", null, null, "uid")
         assertEquals("precondition: success should be set", ListMutationState.Success, vm.createState.value)
         vm.resetCreateState()
         assertEquals(ListMutationState.Idle, vm.createState.value)
+    }
+
+    // ── createList — subtitle / description ───────────────────────────────────
+
+    @Test
+    fun createList_withSubtitle_passesSubtitleToRepository() = runTest {
+        val (vm, repo) = makeVm()
+        vm.createList("New List", "A great subtitle", null, "uid")
+        assertEquals("A great subtitle", repo.lastCreatedList?.subtitle)
+    }
+
+    @Test
+    fun createList_withDescription_passesDescriptionToRepository() = runTest {
+        val (vm, repo) = makeVm()
+        vm.createList("New List", null, "A great description", "uid")
+        assertEquals("A great description", repo.lastCreatedList?.description)
+    }
+
+    @Test
+    fun createList_nullSubtitle_passesNullToRepository() = runTest {
+        val (vm, repo) = makeVm()
+        vm.createList("New List", null, null, "uid")
+        assertNull(repo.lastCreatedList?.subtitle)
     }
 }

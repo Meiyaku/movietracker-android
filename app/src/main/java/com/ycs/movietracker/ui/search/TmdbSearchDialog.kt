@@ -34,8 +34,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -46,7 +48,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.ycs.movietracker.R
 import com.ycs.movietracker.data.model.TmdbSearchResult
 import com.ycs.movietracker.data.repository.TmdbRepository
@@ -80,6 +82,17 @@ fun TmdbSearchDialog(
             hasSearched = true
             isSearching = false
         }
+    }
+
+    LaunchedEffect(query) {
+        if (query.isBlank()) {
+            results = emptyList()
+            error = null
+            hasSearched = false
+            return@LaunchedEffect
+        }
+        delay(500)
+        if (!isSearching) performSearch()
     }
 
     Dialog(onDismissRequest = onDismiss) {

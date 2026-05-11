@@ -50,14 +50,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import coil.compose.AsyncImage
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import com.ycs.movietracker.util.hapticSelection
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
+import coil3.compose.AsyncImage
 import com.ycs.movietracker.R
 import com.ycs.movietracker.util.AppConfig
 import com.ycs.movietracker.data.model.MovieList
@@ -455,66 +463,97 @@ private fun StatusChip(
 
 @Composable
 private fun StarRatingPicker(rating: Double, onRatingSelected: (Double) -> Unit) {
+    val view = LocalView.current
     val starSize = 32.dp
     val starSpacing = 4.dp
     val filledTint = MaterialTheme.colorScheme.primary
     val emptyTint = MaterialTheme.colorScheme.onSurface
-    val context = LocalContext.current
 
     val ratingState by rememberUpdatedState(rating)
     val onRatingSelectedState by rememberUpdatedState(onRatingSelected)
 
+    val ratingDescription = if (rating == 0.0) {
+        stringResource(R.string.cd_rating_none)
+    } else {
+        val ratingStr = if (rating == kotlin.math.floor(rating)) rating.toInt().toString() else rating.toString()
+        stringResource(R.string.cd_rating, ratingStr)
+    }
+    val pickerLabel = stringResource(R.string.cd_rating_picker)
+
     Row(
-        modifier = Modifier.pointerInput(Unit) {
-            fun ratingAt(x: Float): Double {
-                val slotWidth = (starSize + starSpacing).toPx()
-                val starIndex = (x / slotWidth).toInt().coerceIn(0, 4)
-                val localX = x - starIndex * slotWidth
-                val isLeftHalf = localX < starSize.toPx() / 2f
-                return ((starIndex + 1).toDouble() - if (isLeftHalf) 0.5 else 0.0)
-                    .coerceIn(0.5, 5.0)
-            }
-
-            awaitEachGesture {
-                val down = awaitFirstDown(requireUnconsumed = false)
-                val ratingBefore = ratingState
-                val computed = ratingAt(down.position.x)
-                onRatingSelectedState(computed)
-
-                var hasDragged = false
-                drag(down.id) { change ->
-                    change.consume()
-                    hasDragged = true
-                    onRatingSelectedState(ratingAt(change.position.x))
-                }
-
-                if (!hasDragged && computed == ratingBefore) {
-                    onRatingSelectedState(0.0)
+        modifier = Modifier
+            .semantics {
+                contentDescription = pickerLabel
+                stateDescription = ratingDescription
+                progressBarRangeInfo = ProgressBarRangeInfo(
+                    current = rating.toFloat(),
+                    range = 0f..5f,
+                    steps = 10
+                )
+                setProgress { targetValue ->
+                    val rounded = (kotlin.math.round(targetValue.toDouble() * 2) / 2.0)
+                        .coerceIn(0.0, 5.0)
+                    if (rounded != ratingState) { onRatingSelectedState(rounded); true } else false
                 }
             }
-        },
+            .pointerInput(Unit) {
+                fun ratingAt(x: Float): Double {
+                    val slotWidth = (starSize + starSpacing).toPx()
+                    val starIndex = (x / slotWidth).toInt().coerceIn(0, 4)
+                    val localX = x - starIndex * slotWidth
+                    val isLeftHalf = localX < starSize.toPx() / 2f
+                    return ((starIndex + 1).toDouble() - if (isLeftHalf) 0.5 else 0.0)
+                        .coerceIn(0.5, 5.0)
+                }
+
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val ratingBefore = ratingState
+                    val computed = ratingAt(down.position.x)
+                    if (computed != ratingBefore) {
+                        view.hapticSelection()
+                    }
+                    onRatingSelectedState(computed)
+                    var lastHapticRating = computed
+
+                    var hasDragged = false
+                    drag(down.id) { change ->
+                        change.consume()
+                        hasDragged = true
+                        val newRating = ratingAt(change.position.x)
+                        if (newRating != lastHapticRating) {
+                            view.hapticSelection()
+                            lastHapticRating = newRating
+                        }
+                        onRatingSelectedState(newRating)
+                    }
+
+                    if (!hasDragged && computed == ratingBefore) {
+                        onRatingSelectedState(0.0)
+                    }
+                }
+            },
         horizontalArrangement = Arrangement.spacedBy(starSpacing)
     ) {
         for (star in 1..5) {
             val starDouble = star.toDouble()
-            val cd = context.resources.getQuantityString(R.plurals.cd_star_button, star, star)
             when {
                 rating >= starDouble -> Icon(
                     imageVector = Icons.Filled.Star,
-                    contentDescription = cd,
+                    contentDescription = null,
                     tint = filledTint,
-                    modifier = Modifier.size(starSize)
+                    modifier = Modifier.size(starSize).clearAndSetSemantics {}
                 )
                 rating >= starDouble - 0.5 -> HalfStarIcon(
-                    modifier = Modifier.size(starSize),
+                    modifier = Modifier.size(starSize).clearAndSetSemantics {},
                     filledTint = filledTint,
                     emptyTint = emptyTint
                 )
                 else -> Icon(
                     imageVector = Icons.Outlined.Star,
-                    contentDescription = cd,
+                    contentDescription = null,
                     tint = emptyTint,
-                    modifier = Modifier.size(starSize)
+                    modifier = Modifier.size(starSize).clearAndSetSemantics {}
                 )
             }
         }

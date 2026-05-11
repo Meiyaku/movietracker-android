@@ -8,5 +8,7 @@ enum class SortOrder {
     RATING_ASC,
     RATING_DESC,
     GENRE_ASC,
-    GENRE_DESC
+    GENRE_DESC,
+    CREATED_ASC,
+    CREATED_DESC
 }

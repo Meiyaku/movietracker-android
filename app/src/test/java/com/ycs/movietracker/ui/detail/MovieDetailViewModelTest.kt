@@ -453,8 +453,12 @@ class MovieDetailViewModelTest {
 
     private val fakeTmdbRepo = FakeTmdbRepository()
 
+    private val fakeConnectivity = object : com.ycs.movietracker.util.ConnectivityMonitor {
+        override val isOnline = true
+    }
+
     private fun makeVm(existingMovie: Movie?) =
-        MovieDetailViewModel(fakeRepo, fakeRemoteConfig, fakeTmdbRepo, context, uid = "user1", movieId = existingMovie?.id ?: "new", existingMovie = existingMovie)
+        MovieDetailViewModel(fakeRepo, fakeRemoteConfig, fakeTmdbRepo, context, fakeConnectivity, uid = "user1", movieId = existingMovie?.id ?: "new", existingMovie = existingMovie)
 
     private fun sampleMovie(
         id: String = "m1",

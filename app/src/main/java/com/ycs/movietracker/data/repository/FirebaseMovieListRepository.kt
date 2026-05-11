@@ -12,9 +12,8 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
-import javax.inject.Inject
 
-class FirebaseMovieListRepository @Inject constructor(
+class FirebaseMovieListRepository(
     private val firestore: FirebaseFirestore,
     private val remoteConfigRepository: RemoteConfigRepository
 ) : MovieListRepository {
@@ -37,6 +36,8 @@ class FirebaseMovieListRepository @Inject constructor(
                 MovieList(
                     id = doc.id,
                     name = doc.getString("name") ?: "",
+                    subtitle = doc.getString("subtitle"),
+                    description = doc.getString("description"),
                     createdAt = doc.getTimestamp("createdAt") ?: Timestamp.now()
                 )
             }
@@ -49,13 +50,19 @@ class FirebaseMovieListRepository @Inject constructor(
         firebaseCall("createList [uid=$uid, name=${list.name}]") {
             val doc = if (list.id.isBlank()) listsCollection(uid).document()
                       else listsCollection(uid).document(list.id)
-            doc.set(mapOf("name" to list.name, "createdAt" to list.createdAt)).await()
+            val data = mutableMapOf<String, Any>("name" to list.name, "createdAt" to list.createdAt)
+            list.subtitle?.let { data["subtitle"] = it }
+            list.description?.let { data["description"] = it }
+            doc.set(data).await()
             doc.id
         }
 
     override suspend fun updateList(uid: String, list: MovieList): Result<Unit> =
         firebaseCall("updateList [uid=$uid, listId=${list.id}]") {
-            listsCollection(uid).document(list.id).update("name", list.name).await()
+            val data = mutableMapOf<String, Any?>("name" to list.name)
+            data["subtitle"] = list.subtitle ?: com.google.firebase.firestore.FieldValue.delete()
+            data["description"] = list.description ?: com.google.firebase.firestore.FieldValue.delete()
+            listsCollection(uid).document(list.id).update(data).await()
         }
 
     override suspend fun deleteList(uid: String, listId: String): Result<Unit> =

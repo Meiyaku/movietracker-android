@@ -57,6 +57,8 @@
     <string name="label_lists">Lists</string>
     <string name="label_rating">Rating</string>
     <string name="cd_rating">%1$s out of 5 stars</string>
+    <string name="cd_rating_none">No rating</string>
+    <string name="cd_rating_picker">Rating picker</string>
     <string name="label_description">Description</string>
     <string name="label_notes">Notes</string>
     <string name="action_search_tmdb">Search TMDB</string>
@@ -77,6 +79,10 @@
     <string name="error_duplicate_movie">A movie with this title, year, and genre already exists.</string>
     <string name="dialog_title_delete_movie">Delete movie?</string>
     <string name="dialog_msg_delete_movie">Delete \'%1$s\'? This cannot be undone.</string>
+    <string name="dialog_title_duplicate_movie">Duplicate Movie</string>
+    <string name="dialog_msg_duplicate_movie">A movie with this title, year, and genre already exists. Save anyway?</string>
+    <string name="action_save_anyway">Save Anyway</string>
+    <string name="cd_share_movie">Share movie</string>
 
     <!-- Navigation drawer -->
     <string name="cd_close_menu">Close menu</string>
@@ -95,11 +101,16 @@
     <string name="error_list_name_too_long">List name must be 100 characters or fewer</string>
     <string name="error_create_list_failed">Failed to create list. Please try again.</string>
 
-    <!-- Rename list dialog -->
+    <!-- Edit list dialog -->
     <string name="title_rename_list">Rename List</string>
+    <string name="title_edit_list">Edit List</string>
     <string name="action_save">Save</string>
     <string name="cd_rename_list">Rename list</string>
+    <string name="cd_edit_list">Edit list</string>
+    <string name="label_list_subtitle">Subtitle (optional)</string>
+    <string name="label_list_description">Description (optional)</string>
     <string name="error_rename_list_failed">Failed to rename list. Please try again.</string>
+    <string name="error_edit_list_failed">Failed to update list. Please try again.</string>
 
     <!-- Settings screen -->
     <string name="title_settings">Settings</string>
@@ -132,6 +143,8 @@
     <string name="sort_rating_asc">Rating (Lowest First)</string>
     <string name="sort_genre_asc">Genre (A–Z)</string>
     <string name="sort_genre_desc">Genre (Z–A)</string>
+    <string name="sort_created_asc">Date Added (Oldest)</string>
+    <string name="sort_created_desc">Date Added (Newest)</string>
 
     <!-- TMDB search dialog -->
     <string name="placeholder_movie_title">Movie or TV show title</string>
@@ -156,6 +169,10 @@
     <!-- Log out confirmation dialog -->
     <string name="dialog_title_log_out">Log out?</string>
     <string name="dialog_msg_log_out">Are you sure you want to log out?</string>
+
+    <!-- Toasts / confirmations -->
+    <string name="toast_movie_deleted">Movie deleted</string>
+    <string name="action_retry">Retry</string>
 
     <!-- Delete list dialog -->
     <string name="title_delete_list">Delete list?</string>

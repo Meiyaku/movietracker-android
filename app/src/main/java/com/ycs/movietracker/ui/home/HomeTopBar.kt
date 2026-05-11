@@ -60,7 +60,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import com.ycs.movietracker.util.hapticSelection
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -89,12 +91,13 @@ internal fun HomeTopBar(
     onWatchFilterChange: (WatchFilter) -> Unit,
     onListSelected: (MovieList) -> Unit,
     onCreateList: () -> Unit,
-    onRenameList: (MovieList) -> Unit,
+    onEditList: (MovieList) -> Unit,
     onDeleteList: (MovieList) -> Unit,
     onSettings: () -> Unit,
     onLogOut: () -> Unit,
     isOnline: Boolean = true
 ) {
+    val view = LocalView.current
     var showListSelector by remember { mutableStateOf(false) }
     var showSortDropdown by remember { mutableStateOf(false) }
     var showOverflow by remember { mutableStateOf(false) }
@@ -108,7 +111,7 @@ internal fun HomeTopBar(
             onDismiss = { showListSelector = false },
             onListSelected = { showListSelector = false; onListSelected(it) },
             onCreateList = { showListSelector = false; onCreateList() },
-            onRenameList = { showListSelector = false; onRenameList(it) },
+            onEditList = { showListSelector = false; onEditList(it) },
             onDeleteList = { showListSelector = false; onDeleteList(it) }
         )
     }
@@ -135,37 +138,43 @@ internal fun HomeTopBar(
     Column {
         TopAppBar(
             title = {
-                TextButton(
-                    onClick = { showListSelector = true },
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                Column(
+                    modifier = Modifier
+                        .clickable { showListSelector = true }
+                        .padding(horizontal = 4.dp)
                 ) {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = activeList?.name ?: stringResource(R.string.app_bar_title),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.appColors.homeTopBarContent,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(Modifier.width(2.dp))
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowDown,
-                                contentDescription = stringResource(R.string.cd_open_menu),
-                                tint = MaterialTheme.appColors.homeTopBarContent.copy(alpha = 0.7f),
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        if (watchedCount + wantCount > 0) {
-                            Text(
-                                text = stringResource(
-                                    R.string.label_watch_status_summary,
-                                    watchedCount,
-                                    wantCount
-                                ),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.appColors.homeTopBarContent.copy(alpha = 0.6f)
-                            )
-                        }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = activeList?.name ?: stringResource(R.string.app_bar_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.appColors.homeTopBarContent,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.width(2.dp))
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = stringResource(R.string.cd_open_menu),
+                            tint = MaterialTheme.appColors.homeTopBarContent.copy(alpha = 0.7f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    if (activeList?.subtitle != null) {
+                        Text(
+                            text = activeList.subtitle,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.appColors.homeTopBarContent.copy(alpha = 0.7f)
+                        )
+                    }
+                    if (watchedCount + wantCount > 0) {
+                        Text(
+                            text = stringResource(
+                                R.string.label_watch_status_summary,
+                                watchedCount,
+                                wantCount
+                            ),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.appColors.homeTopBarContent.copy(alpha = 0.6f)
+                        )
                     }
                 }
             },
@@ -186,7 +195,11 @@ internal fun HomeTopBar(
                         SortOrder.entries.forEach { order ->
                             DropdownMenuItem(
                                 text = { Text(sortOrderLabel(order)) },
-                                onClick = { onSortOrderChange(order); showSortDropdown = false },
+                                onClick = {
+                                    view.hapticSelection()
+                                    onSortOrderChange(order)
+                                    showSortDropdown = false
+                                },
                                 trailingIcon = if (sortOrder == order) {
                                     { Icon(Icons.Default.Check, contentDescription = stringResource(R.string.cd_selected)) }
                                 } else null
@@ -196,7 +209,11 @@ internal fun HomeTopBar(
                         WatchFilter.entries.forEach { filter ->
                             DropdownMenuItem(
                                 text = { Text(watchFilterLabel(filter)) },
-                                onClick = { onWatchFilterChange(filter); showSortDropdown = false },
+                                onClick = {
+                                    view.hapticSelection()
+                                    onWatchFilterChange(filter)
+                                    showSortDropdown = false
+                                },
                                 trailingIcon = if (watchFilter == filter) {
                                     { Icon(Icons.Default.Check, contentDescription = stringResource(R.string.cd_selected)) }
                                 } else null
@@ -317,9 +334,10 @@ private fun ListSelectorDialog(
     onDismiss: () -> Unit,
     onListSelected: (MovieList) -> Unit,
     onCreateList: () -> Unit,
-    onRenameList: (MovieList) -> Unit,
+    onEditList: (MovieList) -> Unit,
     onDeleteList: (MovieList) -> Unit
 ) {
+    val view = LocalView.current
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(16.dp),
@@ -370,21 +388,32 @@ private fun ListSelectorDialog(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { onListSelected(list) }
+                                    .clickable {
+                                        view.hapticSelection()
+                                        onListSelected(list)
+                                    }
                                     .semantics {
                                         if (isActive) stateDescription = currentListLabel
                                     }
                                     .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = list.name,
-                                    modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (isActive) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurface
-                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = list.name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+                                        color = if (isActive) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (list.subtitle != null) {
+                                        Text(
+                                            text = list.subtitle,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                                        )
+                                    }
+                                }
                                 if (isActive) {
                                     Icon(
                                         Icons.Default.Check,
@@ -395,10 +424,10 @@ private fun ListSelectorDialog(
                                     Spacer(Modifier.width(4.dp))
                                 }
                                 if (!list.isDefault) {
-                                    IconButton(onClick = { onRenameList(list) }) {
+                                    IconButton(onClick = { onEditList(list) }) {
                                         Icon(
                                             Icons.Default.Edit,
-                                            contentDescription = stringResource(R.string.cd_rename_list),
+                                            contentDescription = stringResource(R.string.cd_edit_list),
                                             modifier = Modifier.size(16.dp),
                                             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                                         )
@@ -456,4 +485,6 @@ private fun sortOrderLabel(order: SortOrder): String = when (order) {
     SortOrder.RATING_ASC -> stringResource(R.string.sort_rating_asc)
     SortOrder.GENRE_ASC -> stringResource(R.string.sort_genre_asc)
     SortOrder.GENRE_DESC -> stringResource(R.string.sort_genre_desc)
+    SortOrder.CREATED_ASC -> stringResource(R.string.sort_created_asc)
+    SortOrder.CREATED_DESC -> stringResource(R.string.sort_created_desc)
 }

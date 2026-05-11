@@ -27,7 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.ycs.movietracker.R
 import com.ycs.movietracker.ui.components.StarRating
 import com.ycs.movietracker.ui.components.WatchStatusBadge
