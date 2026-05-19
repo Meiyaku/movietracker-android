@@ -24,8 +24,8 @@ android {
         applicationId = "com.ycs.movietracker"
         minSdk = 29
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.1.4"
+        versionCode = 7
+        versionName = "1.1.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -96,6 +96,7 @@ dependencies {
     implementation(libs.koin.androidx.compose)
     implementation(libs.koin.androidx.compose.navigation)
     implementation(libs.timber)
+    implementation(libs.firebase.analytics)
     implementation(libs.firebase.crashlytics)
     implementation(libs.firebase.config)
     testFixturesImplementation(platform(libs.androidx.compose.bom))

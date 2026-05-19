@@ -72,7 +72,8 @@ internal fun MovieListContent(
     searchQuery: String,
     watchFilter: WatchFilter,
     homeLoadError: String? = null,
-    onRetryLoad: () -> Unit = {}
+    onRetryLoad: () -> Unit = {},
+    onAddMovieWithQuery: (String) -> Unit = {}
 ) {
     // Must be called unconditionally before any early returns to satisfy Compose's composition rules
     val gridState = rememberLazyGridState()
@@ -131,16 +132,42 @@ internal fun MovieListContent(
                 .padding(innerPadding),
             contentAlignment = Alignment.Center
         ) {
-            val emptyText = when {
-                searchQuery.isNotBlank() -> stringResource(R.string.empty_no_movies_search)
-                watchFilter != WatchFilter.ALL -> stringResource(R.string.empty_no_movies_filter)
-                else -> stringResource(R.string.empty_no_movies)
+            if (searchQuery.isNotBlank()) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.empty_no_movies_search),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    )
+                    Text(
+                        text = stringResource(R.string.hint_check_spelling),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                    )
+                    Text(
+                        text = stringResource(R.string.or),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                    )
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = { onAddMovieWithQuery(searchQuery) }
+                    ) {
+                        Text(stringResource(R.string.action_add_movie_button))
+                    }
+                }
+            } else {
+                Text(
+                    text = when {
+                        watchFilter != WatchFilter.ALL -> stringResource(R.string.empty_no_movies_filter)
+                        else -> stringResource(R.string.empty_no_movies)
+                    },
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                )
             }
-            Text(
-                text = emptyText,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-            )
         }
         return
     }

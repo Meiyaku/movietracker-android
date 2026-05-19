@@ -79,6 +79,7 @@ fun HomeRoute(
         deleteState = deleteState,
         onResetDeleteState = movieListViewModel::resetDeleteState,
         onAddMovieClick = { navController.navigate(AppRoute.Detail("new")) },
+        onAddMovieWithQuery = { query -> navController.navigate(AppRoute.Detail("new", initialTmdbQuery = query)) },
         snackbarMessage = movieSnackbar ?: listLoadError,
         onSnackbarDismiss = {
             movieViewModel.clearSnackbarMessage()

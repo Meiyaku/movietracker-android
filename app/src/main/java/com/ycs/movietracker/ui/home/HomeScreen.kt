@@ -62,6 +62,7 @@ fun HomeScreen(
     onMovieClick: (Movie) -> Unit = {},
     onDeleteMovie: (String) -> Unit = {},
     onAddMovieClick: () -> Unit = {},
+    onAddMovieWithQuery: (String) -> Unit = {},
     onLogOut: () -> Unit = {},
     onSettings: () -> Unit = {},
     onCreateListConfirm: (String, String?, String?) -> Unit = { _, _, _ -> },
@@ -158,7 +159,8 @@ fun HomeScreen(
                 searchQuery = searchQuery,
                 watchFilter = watchFilter,
                 homeLoadError = homeLoadError,
-                onRetryLoad = onRetryLoad
+                onRetryLoad = onRetryLoad,
+                onAddMovieWithQuery = onAddMovieWithQuery
             )
         }
 

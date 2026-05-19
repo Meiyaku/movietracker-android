@@ -132,6 +132,10 @@
     <string name="filter_all">Show All</string>
     <string name="filter_watched">Watched Only</string>
     <string name="filter_want_to_watch">Want to Watch Only</string>
+    <string name="action_reset_filter_sort">Reset Filter &amp; Sort</string>
+    <string name="action_add_movie_button">Add Movie</string>
+    <string name="hint_check_spelling">Check the spelling</string>
+    <string name="or">or</string>
     <string name="empty_no_movies_filter">No movies match the current filter.</string>
 
     <!-- Sort orders -->

@@ -52,6 +52,7 @@ fun NavGraph(
             val movieViewModel = koinViewModel<MovieViewModel>(viewModelStoreOwner = homeEntry)
             DetailRoute(
                 movieId = route.movieId,
+                initialTmdbQuery = route.initialTmdbQuery,
                 authViewModel = authViewModel,
                 movieListViewModel = movieListViewModel,
                 movieViewModel = movieViewModel,

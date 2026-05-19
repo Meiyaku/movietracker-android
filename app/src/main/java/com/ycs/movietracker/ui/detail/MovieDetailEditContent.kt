@@ -96,9 +96,10 @@ internal fun EditModeContent(
     allLists: List<MovieList>,
     isExistingMovie: Boolean,
     onDeleteClick: () -> Unit,
-    tmdbRepository: TmdbRepository? = null
+    tmdbRepository: TmdbRepository? = null,
+    initialTmdbQuery: String = ""
 ) {
-    var showTmdbSearch by remember { mutableStateOf(false) }
+    var showTmdbSearch by remember { mutableStateOf(initialTmdbQuery.isNotBlank()) }
     var showRatingResetConfirm by remember { mutableStateOf(false) }
 
     if (showRatingResetConfirm) {
@@ -142,6 +143,7 @@ internal fun EditModeContent(
         TmdbSearchDialog(
             repository = tmdbRepository,
             onDismiss = { showTmdbSearch = false },
+            initialQuery = initialTmdbQuery,
             onResult = { result, trailerUrl ->
                 onDraftChange(draft.copy(
                     title = result.displayTitle,
@@ -241,10 +243,9 @@ internal fun EditModeContent(
     )
 
     OutlinedTextField(
-        value = draft.description,
-        onValueChange = { onDraftChange(draft.copy(description = it)) },
-        label = { Text(stringResource(R.string.label_description)) },
-        placeholder = { Text(stringResource(R.string.placeholder_description_tmdb)) },
+        value = draft.notes,
+        onValueChange = { onDraftChange(draft.copy(notes = it)) },
+        label = { Text(stringResource(R.string.placeholder_notes)) },
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 120.dp),
@@ -253,9 +254,10 @@ internal fun EditModeContent(
     )
 
     OutlinedTextField(
-        value = draft.notes,
-        onValueChange = { onDraftChange(draft.copy(notes = it)) },
-        label = { Text(stringResource(R.string.placeholder_notes)) },
+        value = draft.description,
+        onValueChange = { onDraftChange(draft.copy(description = it)) },
+        label = { Text(stringResource(R.string.label_description)) },
+        placeholder = { Text(stringResource(R.string.placeholder_description_tmdb)) },
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 120.dp),

@@ -205,7 +205,7 @@ internal fun HomeTopBar(
                                 } else null
                             )
                         }
-                        HorizontalDivider()
+                        HorizontalDivider(thickness = 2.dp, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(vertical = 4.dp))
                         WatchFilter.entries.forEach { filter ->
                             DropdownMenuItem(
                                 text = { Text(watchFilterLabel(filter)) },
@@ -219,6 +219,16 @@ internal fun HomeTopBar(
                                 } else null
                             )
                         }
+                        HorizontalDivider(thickness = 2.dp, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(vertical = 4.dp))
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_reset_filter_sort)) },
+                            onClick = {
+                                view.hapticSelection()
+                                onSortOrderChange(SortOrder.TITLE_ASC)
+                                onWatchFilterChange(WatchFilter.ALL)
+                                showSortDropdown = false
+                            }
+                        )
                     }
                 }
                 Box {

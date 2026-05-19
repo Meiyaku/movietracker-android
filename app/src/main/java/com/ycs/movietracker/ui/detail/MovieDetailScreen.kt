@@ -57,7 +57,8 @@ fun MovieDetailScreen(
     allLists: List<MovieList>,
     onBack: () -> Unit,
     onDeleted: () -> Unit = {},
-    onSaved: () -> Unit = {}
+    onSaved: () -> Unit = {},
+    initialTmdbQuery: String = ""
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val view = LocalView.current
@@ -184,7 +185,8 @@ fun MovieDetailScreen(
                             allLists = allLists,
                             isExistingMovie = viewModel.existingMovie != null,
                             onDeleteClick = { viewModel.requestDeleteConfirm() },
-                            tmdbRepository = if (isTmdbSearchEnabled) viewModel.tmdbRepository else null
+                            tmdbRepository = if (isTmdbSearchEnabled) viewModel.tmdbRepository else null,
+                            initialTmdbQuery = initialTmdbQuery
                         )
                     } else {
                         val movie = viewModel.existingMovie

@@ -7,5 +7,5 @@ sealed interface AppRoute {
     @Serializable data object Auth : AppRoute
     @Serializable data object Home : AppRoute
     @Serializable data object Settings : AppRoute
-    @Serializable data class Detail(val movieId: String) : AppRoute
+    @Serializable data class Detail(val movieId: String, val initialTmdbQuery: String = "") : AppRoute
 }

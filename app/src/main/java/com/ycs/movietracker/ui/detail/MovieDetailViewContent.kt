@@ -116,23 +116,6 @@ internal fun ViewModeContent(
         }
     }
 
-    if (!description.isNullOrEmpty()) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = stringResource(R.string.label_description),
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                letterSpacing = 0.5.sp
-            )
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-        }
-    }
-
     if (!notes.isNullOrEmpty()) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
@@ -151,6 +134,23 @@ internal fun ViewModeContent(
             ) {
                 Text(text = notes, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground)
             }
+        }
+    }
+
+    if (!description.isNullOrEmpty()) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = stringResource(R.string.label_description),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                letterSpacing = 0.5.sp
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground
+            )
         }
     }
 }

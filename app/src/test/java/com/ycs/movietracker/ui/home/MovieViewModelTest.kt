@@ -566,4 +566,49 @@ class MovieViewModelTest {
         assertFalse(vm.filteredMovies.value.any { it.id == toDelete.id })
         assertEquals(1, vm.filteredMovies.value.size)
     }
+
+    // ── empty search state (drives "Add Movie from search" UI) ────────────────
+
+    @Test
+    fun setSearchQuery_noMatch_filteredMoviesEmptyAndQueryPreserved() = runTest(testDispatcher) {
+        val vm = makeVm(movies = listOf(movie("Inception"), movie("The Matrix")))
+        vm.setSearchQuery("zzznomatch")
+        advanceTimeBy(AppConfig.SEARCH_DEBOUNCE_MS)
+        runCurrent()
+        assertTrue(vm.filteredMovies.value.isEmpty())
+        assertEquals("zzznomatch", vm.searchQuery.value)
+    }
+
+    @Test
+    fun setSearchQuery_clearAfterNoMatch_restoresFilteredMovies() = runTest(testDispatcher) {
+        val vm = makeVm(movies = listOf(movie("Inception"), movie("The Matrix")))
+        vm.setSearchQuery("zzznomatch")
+        advanceTimeBy(AppConfig.SEARCH_DEBOUNCE_MS)
+        runCurrent()
+        assertTrue("precondition: no results", vm.filteredMovies.value.isEmpty())
+        vm.setSearchQuery("")
+        assertEquals(2, vm.filteredMovies.value.size)
+    }
+
+    // ── reset filter / sort ───────────────────────────────────────────────────
+
+    @Test
+    fun setWatchFilter_resetToAll_afterFilterApplied_restoresAllMovies() = runTest {
+        val movies = listOf(watchedMovie("A"), wantToWatchMovie("B"), watchedMovie("C"))
+        val vm = makeVm(movies = movies)
+        vm.setWatchFilter(WatchFilter.WATCHED)
+        assertEquals(2, vm.filteredMovies.value.size)
+        vm.setWatchFilter(WatchFilter.ALL)
+        assertEquals(3, vm.filteredMovies.value.size)
+    }
+
+    @Test
+    fun setSortOrder_resetToTitleAsc_afterSortChanged_restoresAlphabeticalOrder() = runTest {
+        val movies = listOf(movie("Zorro"), movie("Avatar"), movie("Matrix"))
+        val vm = makeVm(movies = movies)
+        vm.setSortOrder(SortOrder.TITLE_DESC)
+        assertEquals("Zorro", vm.filteredMovies.value.first().title)
+        vm.setSortOrder(SortOrder.TITLE_ASC)
+        assertEquals("Avatar", vm.filteredMovies.value.first().title)
+    }
 }

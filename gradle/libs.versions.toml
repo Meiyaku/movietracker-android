@@ -59,6 +59,7 @@ koin-android = { group = "io.insert-koin", name = "koin-android" }
 koin-androidx-compose = { group = "io.insert-koin", name = "koin-androidx-compose" }
 koin-androidx-compose-navigation = { group = "io.insert-koin", name = "koin-androidx-compose-navigation" }
 timber = { group = "com.jakewharton.timber", name = "timber", version.ref = "timber" }
+firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
 firebase-crashlytics = { group = "com.google.firebase", name = "firebase-crashlytics" }
 firebase-config = { group = "com.google.firebase", name = "firebase-config" }
 okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "mockwebserver" }

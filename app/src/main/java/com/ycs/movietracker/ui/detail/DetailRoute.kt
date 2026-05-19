@@ -14,6 +14,7 @@ import com.ycs.movietracker.ui.home.MovieViewModel
 @Composable
 fun DetailRoute(
     movieId: String,
+    initialTmdbQuery: String = "",
     authViewModel: AuthViewModel,
     movieListViewModel: MovieListViewModel,
     movieViewModel: MovieViewModel,
@@ -64,12 +65,16 @@ fun DetailRoute(
     MovieDetailScreen(
         viewModel = detailViewModel,
         allLists = lists,
+        initialTmdbQuery = initialTmdbQuery,
         onBack = { navController.popBackStack() },
         onDeleted = {
             movieViewModel.notifyMovieRemoved(movieId)
             movieViewModel.showDeletedToast()
             navController.popBackStack()
         },
-        onSaved = { navController.popBackStack() }
+        onSaved = {
+            movieViewModel.setSearchQuery("")
+            navController.popBackStack()
+        }
     )
 }

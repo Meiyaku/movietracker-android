@@ -58,9 +58,10 @@ import kotlinx.coroutines.launch
 fun TmdbSearchDialog(
     repository: TmdbRepository,
     onDismiss: () -> Unit,
-    onResult: (TmdbSearchResult, trailerUrl: String?) -> Unit
+    onResult: (TmdbSearchResult, trailerUrl: String?) -> Unit,
+    initialQuery: String = ""
 ) {
-    var query by remember { mutableStateOf("") }
+    var query by remember { mutableStateOf(initialQuery) }
     var isSearching by remember { mutableStateOf(false) }
     var results by remember { mutableStateOf<List<TmdbSearchResult>>(emptyList()) }
     var error by remember { mutableStateOf<String?>(null) }
