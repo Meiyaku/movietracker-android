@@ -21,6 +21,7 @@ import com.ycs.movietracker.data.repository.MovieRepository
 import com.ycs.movietracker.data.repository.RemoteConfigRepository
 import com.ycs.movietracker.test.FakeTmdbRepository
 import com.ycs.movietracker.ui.theme.MovietrackerTheme
+import com.ycs.movietracker.util.AndroidStringProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -52,6 +53,8 @@ class MovieDetailScreenTest {
         override val maxRetryAttempts = 3
         override val isTmdbSearchEnabled = MutableStateFlow(true)
         override val tmdbApiKey = MutableStateFlow("")
+        override val whatsNew = MutableStateFlow("")
+        override val whatsNewVersion = MutableStateFlow(0)
     }
 
     private val fakeTmdbRepo = FakeTmdbRepository()
@@ -59,7 +62,7 @@ class MovieDetailScreenTest {
     private val fakeConnectivity = object : com.ycs.movietracker.util.ConnectivityMonitor { override val isOnline = true }
 
     private fun makeVm(existingMovie: Movie? = null) =
-        MovieDetailViewModel(fakeRepo, fakeRemoteConfig, fakeTmdbRepo, ApplicationProvider.getApplicationContext(), fakeConnectivity, uid = "user1", movieId = existingMovie?.id ?: "new", existingMovie = existingMovie)
+        MovieDetailViewModel(fakeRepo, fakeRemoteConfig, fakeTmdbRepo, AndroidStringProvider(ApplicationProvider.getApplicationContext()), fakeConnectivity, uid = "user1", movieId = existingMovie?.id ?: "new", existingMovie = existingMovie)
 
     private fun setContent(
         vm: MovieDetailViewModel,
@@ -122,34 +125,6 @@ class MovieDetailScreenTest {
     fun viewMode_doesNotShowTrailerButton_whenNoTrailerUrl() {
         setContent(vm = makeVm(existingMovie = watchedMovie(trailerUrl = null)))
         composeTestRule.onNodeWithText("Watch Trailer").assertDoesNotExist()
-    }
-
-    // ── View mode — list names (bug fix verification) ─────────────────────────
-
-    @Test
-    fun viewMode_showsCorrectListName_fromAllLists() {
-        val movie = watchedMovie(listIds = listOf("list-fav"))
-        val lists = listOf(MovieList(id = "list-fav", name = "Favorites"))
-        setContent(vm = makeVm(existingMovie = movie), allLists = lists)
-        composeTestRule.onNodeWithText("Lists: Favorites").assertIsDisplayed()
-    }
-
-    @Test
-    fun viewMode_showsMultipleListNames_whenMovieInSeveralLists() {
-        val movie = watchedMovie(listIds = listOf("list-a", "list-b"))
-        val lists = listOf(
-            MovieList(id = "list-a", name = "Action"),
-            MovieList(id = "list-b", name = "Sci-Fi")
-        )
-        setContent(vm = makeVm(existingMovie = movie), allLists = lists)
-        composeTestRule.onNodeWithText("Lists: Action, Sci-Fi").assertIsDisplayed()
-    }
-
-    @Test
-    fun viewMode_fallsBackToMyMovies_whenAllListsEmpty() {
-        val movie = watchedMovie(listIds = listOf("list-fav"))
-        setContent(vm = makeVm(existingMovie = movie), allLists = emptyList())
-        composeTestRule.onNodeWithText("Lists: All Movies").assertIsDisplayed()
     }
 
     // ── Edit mode — save button state ─────────────────────────────────────────

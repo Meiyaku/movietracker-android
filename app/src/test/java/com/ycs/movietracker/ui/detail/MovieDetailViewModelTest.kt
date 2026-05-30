@@ -11,6 +11,7 @@ import com.ycs.movietracker.data.model.WatchStatus
 import com.ycs.movietracker.data.repository.MovieRepository
 import com.ycs.movietracker.data.repository.RemoteConfigRepository
 import com.ycs.movietracker.test.FakeTmdbRepository
+import com.ycs.movietracker.util.AndroidStringProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -449,6 +450,8 @@ class MovieDetailViewModelTest {
         override val maxRetryAttempts = 3
         override val isTmdbSearchEnabled = MutableStateFlow(true)
         override val tmdbApiKey = MutableStateFlow("")
+        override val whatsNew = MutableStateFlow("")
+        override val whatsNewVersion = MutableStateFlow(0)
     }
 
     private val fakeTmdbRepo = FakeTmdbRepository()
@@ -458,7 +461,7 @@ class MovieDetailViewModelTest {
     }
 
     private fun makeVm(existingMovie: Movie?) =
-        MovieDetailViewModel(fakeRepo, fakeRemoteConfig, fakeTmdbRepo, context, fakeConnectivity, uid = "user1", movieId = existingMovie?.id ?: "new", existingMovie = existingMovie)
+        MovieDetailViewModel(fakeRepo, fakeRemoteConfig, fakeTmdbRepo, AndroidStringProvider(context), fakeConnectivity, uid = "user1", movieId = existingMovie?.id ?: "new", existingMovie = existingMovie)
 
     private fun sampleMovie(
         id: String = "m1",

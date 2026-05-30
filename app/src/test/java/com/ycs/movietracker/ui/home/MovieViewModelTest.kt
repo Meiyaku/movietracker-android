@@ -11,6 +11,8 @@ import com.ycs.movietracker.data.model.WatchFilter
 import com.ycs.movietracker.data.model.WatchStatus
 import com.ycs.movietracker.data.repository.MovieRepository
 import com.ycs.movietracker.data.repository.RemoteConfigRepository
+import com.ycs.movietracker.util.AndroidStringProvider
+import com.ycs.movietracker.util.NoOpSettingsRepository
 import com.ycs.movietracker.data.repository.StaleCursorException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -56,7 +58,11 @@ class MovieViewModelTest {
         override val maxRetryAttempts = 3
         override val isTmdbSearchEnabled = MutableStateFlow(true)
         override val tmdbApiKey = MutableStateFlow("")
+        override val whatsNew = MutableStateFlow("")
+        override val whatsNewVersion = MutableStateFlow(0)
     }
+
+    private val fakeSettings = NoOpSettingsRepository()
 
     // Shared scheduler so that viewModelScope (Dispatchers.Main), flowOn(computationDispatcher),
     // and runTest(testDispatcher) all advance the same virtual clock.
@@ -130,8 +136,15 @@ class MovieViewModelTest {
         override suspend fun deleteAllMovies(uid: String): Result<Unit> = Result.success(Unit)
     }
 
-    private fun movie(title: String, year: Int? = null, rating: Double? = null) =
-        Movie(id = title, title = title, year = year, rating = rating)
+    // Movies default into "list-1" — the active list used by makeVm — mirroring the
+    // Firestore contract that a movie loaded for a list always carries that list's id.
+    private fun movie(
+        title: String,
+        year: Int? = null,
+        rating: Double? = null,
+        listIds: List<String> = listOf("list-1")
+    ) =
+        Movie(id = title, title = title, year = year, rating = rating, listIds = listIds)
 
     private fun newMovie(title: String, year: Int? = null, rating: Double? = null) =
         NewMovie(title = title, year = year, rating = rating)
@@ -152,7 +165,7 @@ class MovieViewModelTest {
             updateResult = updateResult,
             deleteResult = deleteResult
         )
-        return MovieViewModel(repo, context, fakeRemoteConfig, computationDispatcher).also { it.setSession("uid", activeListId) }
+        return MovieViewModel(repo, AndroidStringProvider(context), fakeRemoteConfig, fakeSettings, computationDispatcher).also { it.setSession("uid", activeListId) }
     }
 
     // ── search filtering ─────────────────────────────────────────────────────
@@ -290,7 +303,7 @@ class MovieViewModelTest {
         val list1Movies = listOf(movie("Matrix"))
         val list2Movies = listOf(movie("Inception"), movie("Avatar"))
         val repo = FakeMovieRepo(moviesByList = mapOf("list-1" to list1Movies, "list-2" to list2Movies))
-        val vm = MovieViewModel(repo, context, fakeRemoteConfig, testDispatcher).also { it.setSession("uid", "list-1") }
+        val vm = MovieViewModel(repo, AndroidStringProvider(context), fakeRemoteConfig, fakeSettings, testDispatcher).also { it.setSession("uid", "list-1") }
 
         assertEquals(1, vm.filteredMovies.value.size)
 
@@ -309,7 +322,7 @@ class MovieViewModelTest {
     @Test
     fun addMovie_delegatesToRepository() = runTest {
         val repo = FakeMovieRepo()
-        val vm = MovieViewModel(repo, context, fakeRemoteConfig, testDispatcher).also { it.setSession("uid", "list-1") }
+        val vm = MovieViewModel(repo, AndroidStringProvider(context), fakeRemoteConfig, fakeSettings, testDispatcher).also { it.setSession("uid", "list-1") }
         vm.addMovie(newMovie("New Movie"))
         assertEquals(1, repo.addCallCount)
     }
@@ -317,7 +330,7 @@ class MovieViewModelTest {
     @Test
     fun updateMovie_delegatesToRepository() = runTest {
         val repo = FakeMovieRepo()
-        val vm = MovieViewModel(repo, context, fakeRemoteConfig, testDispatcher).also { it.setSession("uid", "list-1") }
+        val vm = MovieViewModel(repo, AndroidStringProvider(context), fakeRemoteConfig, fakeSettings, testDispatcher).also { it.setSession("uid", "list-1") }
         vm.updateMovie(movie("Existing"))
         assertEquals(1, repo.updateCallCount)
     }
@@ -325,7 +338,7 @@ class MovieViewModelTest {
     @Test
     fun deleteMovie_delegatesToRepository() = runTest {
         val repo = FakeMovieRepo()
-        val vm = MovieViewModel(repo, context, fakeRemoteConfig, testDispatcher).also { it.setSession("uid", "list-1") }
+        val vm = MovieViewModel(repo, AndroidStringProvider(context), fakeRemoteConfig, fakeSettings, testDispatcher).also { it.setSession("uid", "list-1") }
         vm.deleteMovie("movie-123")
         assertEquals(1, repo.deleteCallCount)
         assertEquals("movie-123", repo.lastDeletedId)
@@ -431,7 +444,7 @@ class MovieViewModelTest {
             override suspend fun checkDuplicate(uid: String, title: String, year: Int?, genre: String?, excludeId: String?) = Result.success(false)
             override suspend fun deleteAllMovies(uid: String) = Result.success(Unit)
         }
-        val vm = MovieViewModel(lyingRepo, context, fakeRemoteConfig, testDispatcher).also { it.setSession("uid", "list-1") }
+        val vm = MovieViewModel(lyingRepo, AndroidStringProvider(context), fakeRemoteConfig, fakeSettings, testDispatcher).also { it.setSession("uid", "list-1") }
         assertFalse(vm.hasMoreMovies.value)
     }
 
@@ -461,7 +474,7 @@ class MovieViewModelTest {
             override suspend fun checkDuplicate(uid: String, title: String, year: Int?, genre: String?, excludeId: String?) = Result.success(false)
             override suspend fun deleteAllMovies(uid: String) = Result.success(Unit)
         }
-        val vm = MovieViewModel(staleCursorRepo, context, fakeRemoteConfig, testDispatcher)
+        val vm = MovieViewModel(staleCursorRepo, AndroidStringProvider(context), fakeRemoteConfig, fakeSettings, testDispatcher)
             .also { it.setSession("uid", "list-1") }
         // After stale-cursor recovery the list should be reloaded from page 1 with no error shown.
         assertEquals(allMovies.size, vm.filteredMovies.value.size)
@@ -556,6 +569,24 @@ class MovieViewModelTest {
         vm.updateMovie(updated)
         assertTrue(vm.filteredMovies.value.any { it.title == "New Title" })
         assertFalse(vm.filteredMovies.value.any { it.title == "Old Title" })
+    }
+
+    @Test
+    fun updateMovie_removedFromActiveList_dropsFromList() = runTest {
+        val removed = movie("Removed")
+        val vm = makeVm(movies = listOf(removed, movie("Keep")))
+        vm.updateMovie(removed.copy(listIds = emptyList()))
+        assertFalse(vm.filteredMovies.value.any { it.id == removed.id })
+        assertEquals(1, vm.filteredMovies.value.size)
+    }
+
+    @Test
+    fun notifyMovieUpdated_removedFromActiveList_dropsFromList() = runTest {
+        val removed = movie("Removed")
+        val vm = makeVm(movies = listOf(removed, movie("Keep")))
+        vm.notifyMovieUpdated(removed.copy(listIds = listOf("other-list")))
+        assertFalse(vm.filteredMovies.value.any { it.id == removed.id })
+        assertEquals(1, vm.filteredMovies.value.size)
     }
 
     @Test

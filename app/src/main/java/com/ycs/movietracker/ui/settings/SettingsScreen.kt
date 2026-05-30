@@ -43,6 +43,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.ycs.movietracker.R
+import com.ycs.movietracker.data.model.MainScreen
 import com.ycs.movietracker.data.model.ThemeMode
 import com.ycs.movietracker.ui.theme.MovietrackerTheme
 import timber.log.Timber
@@ -52,6 +53,8 @@ import timber.log.Timber
 fun SettingsScreen(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     onThemeModeSelected: (ThemeMode) -> Unit = {},
+    mainScreen: MainScreen = MainScreen.MY_LISTS,
+    onMainScreenSelected: (MainScreen) -> Unit = {},
     isDeletingAccount: Boolean = false,
     deleteAccountError: String? = null,
     onDeleteAccount: () -> Unit = {},
@@ -142,6 +145,25 @@ fun SettingsScreen(
                 label = stringResource(R.string.theme_system),
                 selected = themeMode == ThemeMode.SYSTEM,
                 onClick = { onThemeModeSelected(ThemeMode.SYSTEM) }
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // ── Main Screen ───────────────────────────────────────────────────
+            Text(
+                text = stringResource(R.string.title_main_screen),
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+            ThemeModeOption(
+                label = stringResource(R.string.main_screen_movies),
+                selected = mainScreen == MainScreen.MOVIES,
+                onClick = { onMainScreenSelected(MainScreen.MOVIES) }
+            )
+            ThemeModeOption(
+                label = stringResource(R.string.main_screen_my_lists),
+                selected = mainScreen == MainScreen.MY_LISTS,
+                onClick = { onMainScreenSelected(MainScreen.MY_LISTS) }
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))

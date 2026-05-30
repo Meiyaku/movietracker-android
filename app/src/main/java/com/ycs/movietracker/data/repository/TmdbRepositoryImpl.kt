@@ -2,8 +2,11 @@ package com.ycs.movietracker.data.repository
 
 import com.google.gson.annotations.SerializedName
 import com.ycs.movietracker.data.model.TmdbSearchResult
+import com.ycs.movietracker.data.model.TmdbWatchProvider
+import com.ycs.movietracker.data.model.TmdbWatchProviders
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import retrofit2.HttpException
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
@@ -54,6 +57,28 @@ private data class TmdbVideoDto(
     @SerializedName("official") val official: Boolean = false
 )
 
+private data class TmdbWatchProvidersResponse(
+    @SerializedName("results") val results: Map<String, TmdbWatchProvidersRegionDto> = emptyMap()
+)
+
+private data class TmdbWatchProvidersRegionDto(
+    @SerializedName("link") val link: String? = null,
+    @SerializedName("flatrate") val flatrate: List<TmdbWatchProviderDto> = emptyList(),
+    @SerializedName("buy") val buy: List<TmdbWatchProviderDto> = emptyList()
+)
+
+private data class TmdbWatchProviderDto(
+    @SerializedName("provider_id") val providerId: Int = 0,
+    @SerializedName("provider_name") val providerName: String = "",
+    @SerializedName("logo_path") val logoPath: String? = null
+) {
+    fun toProvider() = TmdbWatchProvider(
+        providerId = providerId,
+        providerName = providerName,
+        logoPath = logoPath
+    )
+}
+
 private interface TmdbApiService {
     @GET("search/multi")
     suspend fun search(
@@ -68,7 +93,27 @@ private interface TmdbApiService {
         @Path("mediaType") mediaType: String,
         @Path("id") id: Int
     ): TmdbVideosResponse
+
+    @GET("{mediaType}/{id}/watch/providers")
+    suspend fun getWatchProviders(
+        @Path("mediaType") mediaType: String,
+        @Path("id") id: Int
+    ): TmdbWatchProvidersResponse
+
+    @GET("movie/{id}")
+    suspend fun getMovieDetails(@Path("id") id: Int): TmdbMovieDetailsDto
+
+    @GET("tv/{id}")
+    suspend fun getTvDetails(@Path("id") id: Int): TmdbTvDetailsDto
 }
+
+private data class TmdbMovieDetailsDto(
+    @SerializedName("title") val title: String? = null
+)
+
+private data class TmdbTvDetailsDto(
+    @SerializedName("name") val name: String? = null
+)
 
 // ── Repository implementation ─────────────────────────────────────────────────
 
@@ -111,6 +156,53 @@ class TmdbRepositoryImpl internal constructor(
             // Prefer official trailers; fall back to any trailer
             val video = videos.firstOrNull { it.official } ?: videos.firstOrNull()
             video?.key?.let { "https://www.youtube.com/watch?v=$it" }
+        }
+    }
+
+    override suspend fun getWatchProviders(
+        id: Int,
+        mediaType: String,
+        region: String
+    ): Result<TmdbWatchProviders> {
+        if (remoteConfigRepository.tmdbApiKey.value.isBlank()) {
+            return Result.failure(IllegalStateException("TMDB API key not yet available — please try again shortly"))
+        }
+        val path = if (mediaType == "tv") "tv" else "movie"
+        return runCatching {
+            val regionData = service.getWatchProviders(path, id).results[region]
+                ?: return@runCatching TmdbWatchProviders()
+            TmdbWatchProviders(
+                link = regionData.link,
+                flatrate = regionData.flatrate.map { it.toProvider() },
+                buy = regionData.buy.map { it.toProvider() }
+            )
+        }
+    }
+
+    override suspend fun lookupMediaType(id: Int, expectedTitle: String): Result<String?> {
+        if (remoteConfigRepository.tmdbApiKey.value.isBlank()) {
+            return Result.failure(IllegalStateException("TMDB API key not yet available — please try again shortly"))
+        }
+        suspend fun <T> probe(call: suspend () -> T): T? = try {
+            call()
+        } catch (e: HttpException) {
+            if (e.code() == 404) null else throw e
+        }
+        return runCatching {
+            val movieTitle = probe { service.getMovieDetails(id) }?.title
+            val tvName = probe { service.getTvDetails(id) }?.name
+            val expected = expectedTitle.lowercase()
+
+            // Disambiguate by matching the stored title — TMDB ids are per-namespace, so
+            // the same numeric id can resolve to both a movie and a TV show.
+            when {
+                movieTitle?.lowercase() == expected -> "movie"
+                tvName?.lowercase() == expected -> "tv"
+                // Fall back to whichever endpoint resolved when only one exists.
+                movieTitle != null && tvName == null -> "movie"
+                tvName != null && movieTitle == null -> "tv"
+                else -> null
+            }
         }
     }
 

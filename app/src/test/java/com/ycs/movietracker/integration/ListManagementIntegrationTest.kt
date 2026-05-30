@@ -11,6 +11,7 @@ import com.ycs.movietracker.data.repository.MovieListRepository
 import com.ycs.movietracker.data.repository.MovieRepository
 import com.ycs.movietracker.ui.home.ListMutationState
 import com.ycs.movietracker.ui.home.MovieListViewModel
+import com.ycs.movietracker.util.AndroidStringProvider
 import com.ycs.movietracker.util.ConnectivityMonitor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -104,7 +105,7 @@ class ListManagementIntegrationTest {
     ): Pair<MovieListViewModel, FakeListRepo> {
         val repo = FakeListRepo(initial, createResult = createResult, deleteResult = deleteResult)
         val monitor = object : ConnectivityMonitor { override val isOnline = isOnline }
-        val vm = MovieListViewModel(repo, noopMovieRepo, context, monitor)
+        val vm = MovieListViewModel(repo, noopMovieRepo, AndroidStringProvider(context), monitor)
         return vm to repo
     }
 

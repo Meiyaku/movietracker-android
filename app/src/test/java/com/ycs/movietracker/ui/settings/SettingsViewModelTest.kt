@@ -1,5 +1,6 @@
 package com.ycs.movietracker.ui.settings
 
+import com.ycs.movietracker.data.model.MainScreen
 import com.ycs.movietracker.data.model.ThemeMode
 import com.ycs.movietracker.data.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +46,7 @@ class SettingsViewModelTest {
         initial: ThemeMode = ThemeMode.SYSTEM
     ) : SettingsRepository {
         private val _themeMode = MutableStateFlow(initial)
+        private val _mainScreen = MutableStateFlow(MainScreen.MOVIES)
         var lastSetMode: ThemeMode? = null
         var setCallCount = 0
 
@@ -55,6 +57,15 @@ class SettingsViewModelTest {
             lastSetMode = mode
             _themeMode.value = mode
         }
+
+        override fun getMainScreen(): Flow<MainScreen> = _mainScreen
+
+        override suspend fun setMainScreen(screen: MainScreen) {
+            _mainScreen.value = screen
+        }
+
+        override suspend fun getLastSeenWhatsNewVersion(): Int? = null
+        override suspend fun setLastSeenWhatsNewVersion(version: Int) {}
     }
 
     private fun makeVm(initial: ThemeMode = ThemeMode.SYSTEM): Pair<SettingsViewModel, FakeSettingsRepository> {

@@ -28,6 +28,8 @@ class TmdbRepositoryImplTest {
             override val maxRetryAttempts = 3
             override val isTmdbSearchEnabled = MutableStateFlow(false)
             override val tmdbApiKey = MutableStateFlow(apiKey)
+            override val whatsNew = MutableStateFlow("")
+            override val whatsNewVersion = MutableStateFlow(0)
         }
     )
 

@@ -10,6 +10,8 @@ import com.ycs.movietracker.data.model.WatchStatus
 import com.ycs.movietracker.data.repository.MovieRepository
 import com.ycs.movietracker.data.repository.RemoteConfigRepository
 import com.ycs.movietracker.ui.home.MovieViewModel
+import com.ycs.movietracker.util.AndroidStringProvider
+import com.ycs.movietracker.util.NoOpSettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,8 +56,10 @@ class MovieManagementIntegrationTest {
     private fun movie(
         title: String,
         id: String = title,
-        status: WatchStatus = WatchStatus.WANT_TO_WATCH
-    ) = Movie(id = id, title = title, status = status)
+        status: WatchStatus = WatchStatus.WANT_TO_WATCH,
+        // The session's active list — a movie loaded for a list always carries that list's id.
+        listIds: List<String> = listOf("list-1")
+    ) = Movie(id = id, title = title, status = status, listIds = listIds)
 
     private fun makeVm(initialMovies: List<Movie> = emptyList()): MovieViewModel {
         val repo = object : MovieRepository {
@@ -77,8 +81,11 @@ class MovieManagementIntegrationTest {
             override val maxRetryAttempts = 3
             override val isTmdbSearchEnabled = MutableStateFlow(false)
             override val tmdbApiKey = MutableStateFlow("")
+            override val whatsNew = MutableStateFlow("")
+            override val whatsNewVersion = MutableStateFlow(0)
         }
-        return MovieViewModel(repo, context, remoteConfig, testDispatcher)
+        val fakeSettings = NoOpSettingsRepository()
+        return MovieViewModel(repo, AndroidStringProvider(context), remoteConfig, fakeSettings, testDispatcher)
             .also { it.setSession("uid", "list-1") }
     }
 

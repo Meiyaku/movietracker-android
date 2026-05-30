@@ -1,7 +1,6 @@
 package com.ycs.movietracker.ui.detail
 
 import android.content.Intent
-import android.net.Uri
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,13 +31,16 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.core.net.toUri
 import com.ycs.movietracker.util.hapticConfirm
 import com.ycs.movietracker.util.hapticReject
 import androidx.compose.ui.unit.dp
@@ -72,6 +74,9 @@ fun MovieDetailScreen(
     val showDuplicateWarning by viewModel.showDuplicateWarning.collectAsState()
     val draftErrors by viewModel.draftErrors.collectAsState()
     val isTmdbSearchEnabled by viewModel.isTmdbSearchEnabled.collectAsState()
+    val isRedetectingMediaType by viewModel.isRedetectingMediaType.collectAsState()
+    val redetectMediaTypeError by viewModel.redetectMediaTypeError.collectAsState()
+    var whereToWatchTarget by remember { mutableStateOf<Pair<Int, String>?>(null) }
 
     // Guarantee a clean slate when this screen leaves composition. Without this, navigating
     // away mid-snackbar (Error state) cancels the LaunchedEffect below before it can call
@@ -190,9 +195,6 @@ fun MovieDetailScreen(
                         )
                     } else {
                         val movie = viewModel.existingMovie
-                        val listNames = draft.selectedListIds
-                            .mapNotNull { id -> allLists.firstOrNull { it.id == id }?.name }
-                            .ifEmpty { listOf(MovieList.DEFAULT_LIST_NAME) }
                         ViewModeContent(
                             title = movie?.title ?: draft.title,
                             year = movie?.year?.toString() ?: draft.year,
@@ -203,15 +205,46 @@ fun MovieDetailScreen(
                             posterUrl = movie?.posterUrl ?: draft.posterUrl.ifEmpty { null },
                             isWatched = draft.isWatched,
                             rating = if (draft.isWatched && draft.rating > 0) draft.rating else null,
-                            listNames = listNames,
                             onWatchTrailer = { url ->
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                            }
+                                context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
+                            },
+                            onWhereToWatch = {
+                                val tmdbId = movie?.tmdbId
+                                if (tmdbId != null) {
+                                    val mediaType = movie.tmdbMediaType ?: "movie"
+                                    whereToWatchTarget = tmdbId to mediaType
+                                } else {
+                                    val displayTitle = movie?.title ?: draft.title
+                                    val yearStr = movie?.year?.toString() ?: draft.year
+                                    val query = buildString {
+                                        append("where to watch ")
+                                        append(displayTitle)
+                                        if (yearStr.isNotEmpty()) append(" ").append(yearStr)
+                                    }
+                                    val url = "https://www.google.com/search?q=" +
+                                        java.net.URLEncoder.encode(query, "UTF-8")
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
+                                }
+                            },
+                            tmdbId = movie?.tmdbId,
+                            tmdbMediaType = movie?.tmdbMediaType,
+                            isRedetectingMediaType = isRedetectingMediaType,
+                            redetectMediaTypeError = redetectMediaTypeError,
+                            onRedetectMediaType = viewModel::redetectMediaType
                         )
                     }
                 }
             }
         }
+    }
+
+    whereToWatchTarget?.let { (tmdbId, mediaType) ->
+        WhereToWatchDialog(
+            tmdbId = tmdbId,
+            mediaType = mediaType,
+            tmdbRepository = viewModel.tmdbRepository,
+            onDismiss = { whereToWatchTarget = null }
+        )
     }
 
     if (showDuplicateWarning) {

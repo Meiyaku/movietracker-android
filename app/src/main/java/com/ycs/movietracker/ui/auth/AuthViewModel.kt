@@ -1,6 +1,5 @@
 package com.ycs.movietracker.ui.auth
 
-import android.content.Context
 import android.util.Patterns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -16,6 +15,7 @@ import com.ycs.movietracker.data.model.MovieList
 import com.ycs.movietracker.data.repository.AuthRepository
 import com.ycs.movietracker.data.repository.MovieListRepository
 import com.ycs.movietracker.data.repository.MovieRepository
+import com.ycs.movietracker.util.StringProvider
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,7 +35,7 @@ data class AuthUiState(
 )
 
 class AuthViewModel(
-    private val context: Context,
+    private val strings: StringProvider,
     private val authRepository: AuthRepository,
     private val listRepository: MovieListRepository,
     private val movieRepository: MovieRepository
@@ -53,11 +53,11 @@ class AuthViewModel(
 
     fun signUp(email: String, password: String, confirmPassword: String) {
         if (!Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) {
-            _uiState.value = _uiState.value.copy(signUpError = context.getString(R.string.error_invalid_email))
+            _uiState.value = _uiState.value.copy(signUpError = strings.get(R.string.error_invalid_email))
             return
         }
         if (password != confirmPassword) {
-            _uiState.value = _uiState.value.copy(signUpError = context.getString(R.string.error_passwords_do_not_match))
+            _uiState.value = _uiState.value.copy(signUpError = strings.get(R.string.error_passwords_do_not_match))
             return
         }
         _uiState.value = AuthUiState(isLoading = true)
@@ -69,7 +69,7 @@ class AuthViewModel(
                     )
                     if (listResult.isFailure) {
                         val msg = listResult.exceptionOrNull()?.message
-                            ?: context.getString(R.string.error_sign_up_failed)
+                            ?: strings.get(R.string.error_sign_up_failed)
                         _uiState.value = AuthUiState(signUpError = msg)
                         return@launch
                     }
@@ -77,11 +77,11 @@ class AuthViewModel(
                 },
                 onFailure = { e ->
                     val msg = when (e) {
-                        is FirebaseAuthUserCollisionException -> context.getString(R.string.error_email_already_exists)
-                        is FirebaseAuthWeakPasswordException -> context.getString(R.string.error_password_too_short)
-                        is FirebaseAuthInvalidCredentialsException -> context.getString(R.string.error_invalid_email)
-                        is FirebaseNetworkException -> context.getString(R.string.error_auth_network)
-                        else -> e.message ?: context.getString(R.string.error_sign_up_failed)
+                        is FirebaseAuthUserCollisionException -> strings.get(R.string.error_email_already_exists)
+                        is FirebaseAuthWeakPasswordException -> strings.get(R.string.error_password_too_short)
+                        is FirebaseAuthInvalidCredentialsException -> strings.get(R.string.error_invalid_email)
+                        is FirebaseNetworkException -> strings.get(R.string.error_auth_network)
+                        else -> e.message ?: strings.get(R.string.error_sign_up_failed)
                     }
                     _uiState.value = AuthUiState(signUpError = msg)
                 }
@@ -91,7 +91,7 @@ class AuthViewModel(
 
     fun signIn(email: String, password: String) {
         if (!Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) {
-            _uiState.value = _uiState.value.copy(signInError = context.getString(R.string.error_invalid_email))
+            _uiState.value = _uiState.value.copy(signInError = strings.get(R.string.error_invalid_email))
             return
         }
         _uiState.value = AuthUiState(isLoading = true)
@@ -105,9 +105,9 @@ class AuthViewModel(
                 onFailure = { e ->
                     val msg = when (e) {
                         is FirebaseAuthInvalidCredentialsException,
-                        is FirebaseAuthInvalidUserException -> context.getString(R.string.error_invalid_credentials)
-                        is FirebaseNetworkException -> context.getString(R.string.error_auth_network)
-                        else -> e.message ?: context.getString(R.string.error_sign_in_failed)
+                        is FirebaseAuthInvalidUserException -> strings.get(R.string.error_invalid_credentials)
+                        is FirebaseNetworkException -> strings.get(R.string.error_auth_network)
+                        else -> e.message ?: strings.get(R.string.error_sign_in_failed)
                     }
                     _uiState.value = AuthUiState(signInError = msg)
                 }
@@ -154,7 +154,7 @@ class AuthViewModel(
             if (dataError != null) {
                 _uiState.value = _uiState.value.copy(
                     isDeletingAccount = false,
-                    deleteAccountError = dataError.message ?: context.getString(R.string.error_generic)
+                    deleteAccountError = dataError.message ?: strings.get(R.string.error_generic)
                 )
                 return@launch
             }
@@ -165,9 +165,9 @@ class AuthViewModel(
                 },
                 onFailure = { e ->
                     val msg = when (e) {
-                        is FirebaseAuthRecentLoginRequiredException -> context.getString(R.string.error_reauth_required)
-                        is FirebaseNetworkException -> context.getString(R.string.error_auth_network)
-                        else -> e.message ?: context.getString(R.string.error_generic)
+                        is FirebaseAuthRecentLoginRequiredException -> strings.get(R.string.error_reauth_required)
+                        is FirebaseNetworkException -> strings.get(R.string.error_auth_network)
+                        else -> e.message ?: strings.get(R.string.error_generic)
                     }
                     _uiState.value = _uiState.value.copy(
                         isDeletingAccount = false,

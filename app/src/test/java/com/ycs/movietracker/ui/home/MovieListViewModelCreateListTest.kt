@@ -9,6 +9,7 @@ import com.ycs.movietracker.data.model.MoviesPage
 import com.ycs.movietracker.data.model.NewMovie
 import com.ycs.movietracker.data.repository.MovieListRepository
 import com.ycs.movietracker.data.repository.MovieRepository
+import com.ycs.movietracker.util.AndroidStringProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -96,7 +97,7 @@ class MovieListViewModelCreateListTest {
     ): Pair<MovieListViewModel, FakeRepo> {
         val repo = FakeRepo(initialLists, createResult)
         val onlineMonitor = object : com.ycs.movietracker.util.ConnectivityMonitor { override val isOnline = true }
-        val vm = MovieListViewModel(repo, noopMovieRepo, context, onlineMonitor)
+        val vm = MovieListViewModel(repo, noopMovieRepo, AndroidStringProvider(context), onlineMonitor)
         return vm to repo
     }
 

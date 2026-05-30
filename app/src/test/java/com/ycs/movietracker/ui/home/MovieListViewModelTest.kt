@@ -9,6 +9,7 @@ import com.ycs.movietracker.data.model.MoviesPage
 import com.ycs.movietracker.data.model.NewMovie
 import com.ycs.movietracker.data.repository.MovieListRepository
 import com.ycs.movietracker.data.repository.MovieRepository
+import com.ycs.movietracker.util.AndroidStringProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -67,7 +68,10 @@ class MovieListViewModelTest {
         override suspend fun deleteAllMovies(uid: String): Result<Unit> = Result.success(Unit)
     }
 
-    private fun makeVm(lists: List<MovieList>): MovieListViewModel {
+    private fun makeVm(
+        lists: List<MovieList>,
+        movieRepo: MovieRepository = noopMovieRepo
+    ): MovieListViewModel {
         val fakeRepo = object : MovieListRepository {
             override fun getLists(uid: String): Flow<Result<List<MovieList>>> = flowOf(Result.success(lists))
             override suspend fun createList(uid: String, list: MovieList): Result<String> =
@@ -79,8 +83,27 @@ class MovieListViewModelTest {
             override suspend fun deleteAllLists(uid: String): Result<Unit> = Result.success(Unit)
         }
         val onlineMonitor = object : com.ycs.movietracker.util.ConnectivityMonitor { override val isOnline = true }
-        return MovieListViewModel(fakeRepo, noopMovieRepo, context, onlineMonitor)
+        return MovieListViewModel(fakeRepo, movieRepo, AndroidStringProvider(context), onlineMonitor)
     }
+
+    /** A [MovieRepository] whose `getMoviesPage` result is decided per list id by [getPage]. */
+    private fun fakeMovieRepo(getPage: (listId: String) -> Result<MoviesPage>): MovieRepository =
+        object : MovieRepository {
+            override suspend fun getMoviesPage(uid: String, listId: String, pageSize: Int, afterId: String?): Result<MoviesPage> =
+                getPage(listId)
+            override suspend fun addMovie(uid: String, movie: NewMovie): Result<Movie> = Result.success(movie.toMovie(id = ""))
+            override suspend fun updateMovie(uid: String, movie: Movie): Result<Unit> = Result.success(Unit)
+            override suspend fun deleteMovie(uid: String, movieId: String): Result<Unit> = Result.success(Unit)
+            override suspend fun removeListFromMovies(uid: String, listId: String): Result<Unit> = Result.success(Unit)
+            override suspend fun getMovieById(uid: String, movieId: String): Result<Movie> = Result.failure(UnsupportedOperationException())
+            override suspend fun checkDuplicate(uid: String, title: String, year: Int?, genre: String?, excludeId: String?): Result<Boolean> = Result.success(false)
+            override suspend fun deleteAllMovies(uid: String): Result<Unit> = Result.success(Unit)
+        }
+
+    private fun pageOf(listId: String, count: Int): Result<MoviesPage> =
+        Result.success(
+            MoviesPage((0 until count).map { Movie(id = "$listId-$it", listIds = listOf(listId)) }, null, false)
+        )
 
     // ── sort() ───────────────────────────────────────────────────────────────
 
@@ -212,5 +235,39 @@ class MovieListViewModelTest {
         vm.selectList(action)
         vm.selectList(myMovies)
         assertEquals("All Movies", vm.activeList.value?.name)
+    }
+
+    // ── loadMovieCounts ──────────────────────────────────────────────────────
+
+    @Test
+    fun loadMovieCounts_populatesCountPerList() = runTest {
+        val lists = listOf(
+            MovieList(id = "a", name = "All Movies"),
+            MovieList(id = "b", name = "Action")
+        )
+        val repo = fakeMovieRepo { listId -> pageOf(listId, if (listId == "a") 3 else 0) }
+        val vm = makeVm(lists, repo)
+        vm.loadLists("uid-123")
+        vm.loadMovieCounts("uid-123")
+        assertEquals(3, vm.movieCounts.value["a"])
+        assertEquals(0, vm.movieCounts.value["b"])
+    }
+
+    @Test
+    fun loadMovieCounts_repoFailure_countsZero() = runTest {
+        val lists = listOf(MovieList(id = "a", name = "All Movies"))
+        val repo = fakeMovieRepo { Result.failure(RuntimeException("boom")) }
+        val vm = makeVm(lists, repo)
+        vm.loadLists("uid-123")
+        vm.loadMovieCounts("uid-123")
+        assertEquals(0, vm.movieCounts.value["a"])
+    }
+
+    @Test
+    fun loadMovieCounts_blankUid_isIgnored() = runTest {
+        val vm = makeVm(listOf(MovieList(id = "a", name = "All Movies")))
+        vm.loadLists("uid-123")
+        vm.loadMovieCounts("")
+        assertEquals(emptyMap<String, Int>(), vm.movieCounts.value)
     }
 }

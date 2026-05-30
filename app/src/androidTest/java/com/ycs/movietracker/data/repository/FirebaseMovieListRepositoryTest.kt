@@ -42,6 +42,8 @@ class FirebaseMovieListRepositoryTest {
             override val maxRetryAttempts = 3
             override val isTmdbSearchEnabled = MutableStateFlow(true)
             override val tmdbApiKey = MutableStateFlow("")
+            override val whatsNew = MutableStateFlow("")
+            override val whatsNewVersion = MutableStateFlow(0)
         }
         repo = FirebaseMovieListRepository(EmulatorSetup.firestore(), fakeRemoteConfig)
     }

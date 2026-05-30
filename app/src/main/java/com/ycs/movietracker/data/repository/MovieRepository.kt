@@ -13,6 +13,19 @@ interface MovieRepository {
     ): Result<MoviesPage>
     suspend fun addMovie(uid: String, movie: NewMovie): Result<Movie>
     suspend fun updateMovie(uid: String, movie: Movie): Result<Unit>
+
+    /**
+     * Partial update that writes only the TMDB-lookup fields, leaving every other field on the
+     * document untouched. Used by the migration flow to avoid clobbering concurrent edits.
+     * The default implementation is a no-op success for test fakes.
+     */
+    suspend fun setTmdbLookupResult(
+        uid: String,
+        movieId: String,
+        tmdbId: Int?,
+        mediaType: String?
+    ): Result<Unit> = Result.success(Unit)
+
     suspend fun deleteMovie(uid: String, movieId: String): Result<Unit>
     suspend fun removeListFromMovies(uid: String, listId: String): Result<Unit>
     suspend fun getMovieById(uid: String, movieId: String): Result<Movie>

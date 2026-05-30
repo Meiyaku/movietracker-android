@@ -9,6 +9,7 @@ import com.ycs.movietracker.data.model.MoviesPage
 import com.ycs.movietracker.data.model.NewMovie
 import com.ycs.movietracker.data.repository.MovieListRepository
 import com.ycs.movietracker.data.repository.MovieRepository
+import com.ycs.movietracker.util.AndroidStringProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -112,7 +113,7 @@ class MovieListViewModelDeleteListTest {
         val listRepo = FakeListRepo(initialLists, deleteResult)
         val movieRepo = FakeMovieRepo(removeResult)
         val onlineMonitor = object : com.ycs.movietracker.util.ConnectivityMonitor { override val isOnline = true }
-        val vm = MovieListViewModel(listRepo, movieRepo, context, onlineMonitor)
+        val vm = MovieListViewModel(listRepo, movieRepo, AndroidStringProvider(context), onlineMonitor)
         return Triple(vm, listRepo, movieRepo)
     }
 

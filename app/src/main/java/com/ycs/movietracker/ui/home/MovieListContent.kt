@@ -56,6 +56,12 @@ import com.ycs.movietracker.ui.components.StarRating
 import com.ycs.movietracker.ui.components.WatchStatusBadge
 import com.ycs.movietracker.util.AppConfig
 
+/**
+ * Minimum movie-card width. An adaptive grid fits as many columns of at least this width as
+ * the screen allows — 2 on a portrait phone, more in landscape / on larger screens.
+ */
+private val MovieCardMinWidth = 150.dp
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun MovieListContent(
@@ -90,7 +96,7 @@ internal fun MovieListContent(
 
     if (isLoadingLists || isLoadingMovies) {
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Adaptive(MovieCardMinWidth),
             modifier = Modifier.fillMaxSize().padding(innerPadding).testTag("skeletonGrid"),
             contentPadding = PaddingValues(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -178,7 +184,7 @@ internal fun MovieListContent(
         modifier = Modifier.fillMaxSize().padding(innerPadding)
     ) {
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Adaptive(MovieCardMinWidth),
             state = gridState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),

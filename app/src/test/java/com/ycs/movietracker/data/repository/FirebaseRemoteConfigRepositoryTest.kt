@@ -50,10 +50,14 @@ class FirebaseRemoteConfigRepositoryTest {
             .thenReturn(tmdbEnabled)
         whenever(mockConfig.getString(FirebaseRemoteConfigRepository.KEY_TMDB_API_KEY))
             .thenReturn(apiKey)
+        whenever(mockConfig.getString(FirebaseRemoteConfigRepository.KEY_WHATS_NEW))
+            .thenReturn("")
         whenever(mockConfig.getLong(FirebaseRemoteConfigRepository.KEY_PAGE_SIZE))
             .thenReturn(pageSizeLong)
         whenever(mockConfig.getLong(FirebaseRemoteConfigRepository.KEY_MAX_RETRY_ATTEMPTS))
             .thenReturn(maxRetryLong)
+        whenever(mockConfig.getLong(FirebaseRemoteConfigRepository.KEY_WHATS_NEW_VERSION))
+            .thenReturn(0L)
         return FirebaseRemoteConfigRepository(mockConfig)
     }
 

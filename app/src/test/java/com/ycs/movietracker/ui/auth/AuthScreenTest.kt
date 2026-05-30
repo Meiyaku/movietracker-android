@@ -16,6 +16,7 @@ import com.ycs.movietracker.data.repository.AuthRepository
 import com.ycs.movietracker.data.repository.MovieListRepository
 import com.ycs.movietracker.test.NoopMovieRepository
 import com.ycs.movietracker.ui.theme.MovietrackerTheme
+import com.ycs.movietracker.util.AndroidStringProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import org.junit.Assert.assertFalse
@@ -48,7 +49,12 @@ class AuthScreenTest {
     val composeTestRule = createComposeRule()
 
     private fun makeVm(fakeAuthRepo: FakeAuthRepo = FakeAuthRepo()) =
-        AuthViewModel(ApplicationProvider.getApplicationContext(), fakeAuthRepo, FakeMovieListRepo(), NoopMovieRepository())
+        AuthViewModel(
+            AndroidStringProvider(ApplicationProvider.getApplicationContext()),
+            fakeAuthRepo,
+            FakeMovieListRepo(),
+            NoopMovieRepository()
+        )
 
     private fun setContent(vm: AuthViewModel = makeVm()) {
         composeTestRule.setContent {

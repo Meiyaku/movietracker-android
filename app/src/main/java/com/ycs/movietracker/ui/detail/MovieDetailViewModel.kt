@@ -1,6 +1,5 @@
 package com.ycs.movietracker.ui.detail
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Timestamp
@@ -13,6 +12,7 @@ import com.ycs.movietracker.data.repository.RemoteConfigRepository
 import com.ycs.movietracker.data.repository.TmdbRepository
 import com.ycs.movietracker.util.AppConfig
 import com.ycs.movietracker.util.ConnectivityMonitor
+import com.ycs.movietracker.util.StringProvider
 import timber.log.Timber
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -45,7 +45,9 @@ data class DraftState(
     val posterUrl: String = "",
     val isWatched: Boolean = false,
     val rating: Double = 0.0,
-    val selectedListIds: Set<String> = emptySet()
+    val selectedListIds: Set<String> = emptySet(),
+    val tmdbId: Int? = null,
+    val tmdbMediaType: String? = null
 )
 
 data class DraftErrors(
@@ -70,7 +72,7 @@ class MovieDetailViewModel(
     private val movieRepository: MovieRepository,
     private val remoteConfigRepository: RemoteConfigRepository,
     val tmdbRepository: TmdbRepository,
-    private val context: Context,
+    private val strings: StringProvider,
     private val connectivityMonitor: ConnectivityMonitor,
     private val uid: String,
     private val movieId: String,
@@ -107,7 +109,9 @@ class MovieDetailViewModel(
                         posterUrl = movie.posterUrl ?: "",
                         isWatched = movie.status == WatchStatus.WATCHED,
                         rating = movie.rating ?: 0.0,
-                        selectedListIds = movie.listIds.toSet()
+                        selectedListIds = movie.listIds.toSet(),
+                        tmdbId = movie.tmdbId,
+                        tmdbMediaType = movie.tmdbMediaType
                     )
                     _isEditMode.value = false
                     _loadState.value = MovieLoadState.Idle
@@ -115,7 +119,7 @@ class MovieDetailViewModel(
                 .onFailure { e ->
                     Timber.e(e, "fetchMovie failed [uid=$uid, movieId=$movieId]")
                     _loadState.value = MovieLoadState.Error(
-                        e.message ?: context.getString(R.string.error_generic)
+                        e.message ?: strings.get(R.string.error_generic)
                     )
                 }
         }
@@ -238,34 +242,34 @@ class MovieDetailViewModel(
         val maxYear = Calendar.getInstance().get(Calendar.YEAR) + AppConfig.MAX_FUTURE_YEAR_OFFSET
         return DraftErrors(
             title = when {
-                d.title.trim().isEmpty()              -> context.getString(R.string.error_title_required)
-                d.title.length > AppConfig.MAX_TITLE_LENGTH -> context.getString(R.string.error_title_too_long)
+                d.title.trim().isEmpty()              -> strings.get(R.string.error_title_required)
+                d.title.length > AppConfig.MAX_TITLE_LENGTH -> strings.get(R.string.error_title_too_long)
                 else -> null
             },
             year = d.year.takeIf { it.isNotEmpty() }?.let {
                 val y = it.toIntOrNull()
                 when {
-                    y == null               -> context.getString(R.string.error_year_invalid, maxYear)
-                    y < AppConfig.MIN_MOVIE_YEAR -> context.getString(R.string.error_year_invalid, maxYear)
-                    y > maxYear             -> context.getString(R.string.error_year_invalid, maxYear)
+                    y == null               -> strings.get(R.string.error_year_invalid, maxYear)
+                    y < AppConfig.MIN_MOVIE_YEAR -> strings.get(R.string.error_year_invalid, maxYear)
+                    y > maxYear             -> strings.get(R.string.error_year_invalid, maxYear)
                     else -> null
                 }
             },
-            genre = if (d.genre.length > AppConfig.MAX_GENRE_LENGTH) context.getString(R.string.error_genre_too_long) else null,
+            genre = if (d.genre.length > AppConfig.MAX_GENRE_LENGTH) strings.get(R.string.error_genre_too_long) else null,
             trailerUrl = d.trailerUrl.trim().takeIf { it.isNotEmpty() }?.let {
                 if (!it.startsWith("http://") && !it.startsWith("https://"))
-                    context.getString(R.string.error_url_invalid) else null
+                    strings.get(R.string.error_url_invalid) else null
             },
             posterUrl = d.posterUrl.trim().takeIf { it.isNotEmpty() }?.let {
                 if (!it.startsWith("http://") && !it.startsWith("https://"))
-                    context.getString(R.string.error_url_invalid) else null
+                    strings.get(R.string.error_url_invalid) else null
             },
         )
     }
 
     fun save() {
         if (!connectivityMonitor.isOnline) {
-            _operationState.value = DetailOperationState.Error(context.getString(R.string.error_offline))
+            _operationState.value = DetailOperationState.Error(strings.get(R.string.error_offline))
             return
         }
         val d = _draft.value
@@ -298,7 +302,7 @@ class MovieDetailViewModel(
             // title/year/genre can slip through this guard. See MovieRepository.checkDuplicate.
             val duplicateCheck = movieRepository.checkDuplicate(uid, title, year, genre, excludeId)
             if (duplicateCheck.isFailure) {
-                _operationState.value = DetailOperationState.Error(context.getString(R.string.error_generic))
+                _operationState.value = DetailOperationState.Error(strings.get(R.string.error_generic))
                 return@launch
             }
             if (duplicateCheck.getOrDefault(false)) {
@@ -306,13 +310,13 @@ class MovieDetailViewModel(
                 _showDuplicateWarning.value = true
                 return@launch
             }
-            performSave(title, year, genre, status, rating, description, notes, trailerUrl, posterUrl, listIds)
+            performSave(title, year, genre, status, rating, description, notes, trailerUrl, posterUrl, listIds, d.tmdbId, d.tmdbMediaType)
         }
     }
 
     fun saveIgnoringDuplicate() {
         if (!connectivityMonitor.isOnline) {
-            _operationState.value = DetailOperationState.Error(context.getString(R.string.error_offline))
+            _operationState.value = DetailOperationState.Error(strings.get(R.string.error_offline))
             return
         }
         _showDuplicateWarning.value = false
@@ -329,21 +333,22 @@ class MovieDetailViewModel(
         val listIds     = d.selectedListIds.toList()
         _operationState.value = DetailOperationState.Saving
         viewModelScope.launch {
-            performSave(title, year, genre, status, rating, description, notes, trailerUrl, posterUrl, listIds)
+            performSave(title, year, genre, status, rating, description, notes, trailerUrl, posterUrl, listIds, d.tmdbId, d.tmdbMediaType)
         }
     }
 
     private suspend fun performSave(
         title: String, year: Int?, genre: String?, status: WatchStatus, rating: Double?,
         description: String?, notes: String?, trailerUrl: String?, posterUrl: String?,
-        listIds: List<String>
+        listIds: List<String>, tmdbId: Int?, tmdbMediaType: String?
     ) {
         val snapshot = existingMovie
         if (snapshot == null) {
             val newMovie = NewMovie(
                 title = title, year = year, genre = genre, status = status, rating = rating,
                 description = description, notes = notes, trailerUrl = trailerUrl,
-                posterUrl = posterUrl, listIds = listIds, createdAt = Timestamp.now()
+                posterUrl = posterUrl, listIds = listIds, createdAt = Timestamp.now(),
+                tmdbId = tmdbId, tmdbMediaType = tmdbMediaType
             )
             movieRepository.addMovie(uid, newMovie)
                 .onSuccess { savedMovie ->
@@ -353,14 +358,16 @@ class MovieDetailViewModel(
                 }
                 .onFailure {
                     Timber.e(it, "save failed [uid=$uid]")
-                    _operationState.value = DetailOperationState.Error(it.message ?: context.getString(R.string.error_generic))
+                    _operationState.value = DetailOperationState.Error(it.message ?: strings.get(R.string.error_generic))
                 }
         } else {
             val updatedMovie = Movie(
                 id = snapshot.id, title = title, year = year, genre = genre,
                 status = status, rating = rating, description = description, notes = notes,
                 trailerUrl = trailerUrl, posterUrl = posterUrl, listIds = listIds,
-                createdAt = snapshot.createdAt
+                createdAt = snapshot.createdAt,
+                tmdbId = tmdbId, tmdbMediaType = tmdbMediaType,
+                tmdbLookupAttempted = tmdbId != null || snapshot.tmdbLookupAttempted
             )
             movieRepository.updateMovie(uid, updatedMovie)
                 .onSuccess {
@@ -370,14 +377,14 @@ class MovieDetailViewModel(
                 }
                 .onFailure {
                     Timber.e(it, "save failed [uid=$uid, movieId=${snapshot.id}]")
-                    _operationState.value = DetailOperationState.Error(it.message ?: context.getString(R.string.error_generic))
+                    _operationState.value = DetailOperationState.Error(it.message ?: strings.get(R.string.error_generic))
                 }
         }
     }
 
     fun delete() {
         if (!connectivityMonitor.isOnline) {
-            _operationState.value = DetailOperationState.Error(context.getString(R.string.error_offline))
+            _operationState.value = DetailOperationState.Error(strings.get(R.string.error_offline))
             return
         }
         val id = existingMovie?.id ?: return
@@ -387,10 +394,55 @@ class MovieDetailViewModel(
                 .onSuccess { _operationState.value = DetailOperationState.DeleteSuccess }
                 .onFailure {
                     Timber.e(it, "delete failed [uid=$uid, movieId=$id]")
-                    _operationState.value = DetailOperationState.Error(it.message ?: context.getString(R.string.error_generic))
+                    _operationState.value = DetailOperationState.Error(it.message ?: strings.get(R.string.error_generic))
                 }
         }
     }
 
     fun resetOperationState() { _operationState.value = DetailOperationState.Idle }
+
+    private val _isRedetectingMediaType = MutableStateFlow(false)
+    val isRedetectingMediaType: StateFlow<Boolean> = _isRedetectingMediaType.asStateFlow()
+
+    private val _redetectMediaTypeError = MutableStateFlow<String?>(null)
+    val redetectMediaTypeError: StateFlow<String?> = _redetectMediaTypeError.asStateFlow()
+
+    /** Re-probes TMDB to correct a wrong media type on the current movie's tmdbId. */
+    fun redetectMediaType() {
+        val movie = existingMovie ?: return
+        val tmdbId = movie.tmdbId ?: return
+        if (_isRedetectingMediaType.value) return
+        _isRedetectingMediaType.value = true
+        _redetectMediaTypeError.value = null
+        viewModelScope.launch {
+            try {
+                tmdbRepository.lookupMediaType(tmdbId, movie.title).fold(
+                    onSuccess = { resolved ->
+                        if (resolved == null) {
+                            _redetectMediaTypeError.value =
+                                "TMDB couldn't find this id as a movie or TV show."
+                            return@fold
+                        }
+                        movieRepository.setTmdbLookupResult(uid, movie.id, tmdbId, resolved)
+                            .onSuccess {
+                                val updated = movie.copy(tmdbMediaType = resolved)
+                                existingMovie = updated
+                                _lastSavedMovie.value = updated
+                                _draft.value = _draft.value.copy(tmdbMediaType = resolved)
+                            }
+                            .onFailure {
+                                _redetectMediaTypeError.value =
+                                    it.message ?: strings.get(R.string.error_generic)
+                            }
+                    },
+                    onFailure = {
+                        _redetectMediaTypeError.value =
+                            it.message ?: strings.get(R.string.error_generic)
+                    }
+                )
+            } finally {
+                _isRedetectingMediaType.value = false
+            }
+        }
+    }
 }

@@ -21,8 +21,11 @@ import com.ycs.movietracker.data.repository.RemoteConfigRepository
 import com.ycs.movietracker.data.repository.SettingsRepository
 import com.ycs.movietracker.data.repository.TmdbRepository
 import com.ycs.movietracker.data.repository.TmdbRepositoryImpl
+import com.ycs.movietracker.data.service.TmdbBackfillService
+import com.ycs.movietracker.util.AndroidStringProvider
 import com.ycs.movietracker.util.ConnectivityMonitor
 import com.ycs.movietracker.util.NetworkConnectivityMonitor
+import com.ycs.movietracker.util.StringProvider
 import com.ycs.movietracker.ui.auth.AuthViewModel
 import com.ycs.movietracker.ui.detail.MovieDetailViewModel
 import com.ycs.movietracker.ui.home.MovieListViewModel
@@ -68,9 +71,11 @@ val appModule = module {
     single<MovieListRepository> { FirebaseMovieListRepository(get(), get()) }
     single<RemoteConfigRepository> { FirebaseRemoteConfigRepository(get()) }
     single<TmdbRepository> { TmdbRepositoryImpl(get()) }
+    single { TmdbBackfillService(tmdbRepo = get()) }
     single<SettingsRepository> { DataStoreSettingsRepository(androidContext()) }
     single<ConnectivityMonitor> { NetworkConnectivityMonitor(androidContext()) }
     single<MovieCacheService> { FileMovieCacheService(androidContext().cacheDir) }
+    single<StringProvider> { AndroidStringProvider(androidContext()) }
 
     // ── ViewModels ────────────────────────────────────────────────────────────
 
@@ -81,10 +86,12 @@ val appModule = module {
     viewModel {
         MovieViewModel(
             movieRepository = get(),
-            context = androidContext(),
+            strings = get(),
             remoteConfigRepository = get(),
+            settingsRepository = get(),
             computationDispatcher = get(named("defaultDispatcher")),
-            cache = get()
+            cache = get(),
+            tmdbBackfill = get()
         )
     }
 
@@ -94,7 +101,7 @@ val appModule = module {
             movieRepository = get(),
             remoteConfigRepository = get(),
             tmdbRepository = get(),
-            context = androidContext(),
+            strings = get(),
             connectivityMonitor = get(),
             uid = params.get(),
             movieId = params.get(),

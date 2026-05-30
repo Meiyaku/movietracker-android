@@ -14,7 +14,10 @@ data class Movie(
     val trailerUrl: String? = null,
     val posterUrl: String? = null,
     val listIds: List<String> = emptyList(),
-    val createdAt: Timestamp = Timestamp.now()
+    val createdAt: Timestamp = Timestamp.now(),
+    val tmdbId: Int? = null,
+    val tmdbMediaType: String? = null,
+    val tmdbLookupAttempted: Boolean = false
 )
 
 /**
@@ -34,7 +37,9 @@ data class NewMovie(
     val trailerUrl: String? = null,
     val posterUrl: String? = null,
     val listIds: List<String> = emptyList(),
-    val createdAt: Timestamp = Timestamp.now()
+    val createdAt: Timestamp = Timestamp.now(),
+    val tmdbId: Int? = null,
+    val tmdbMediaType: String? = null
 ) {
     fun toMovie(id: String) = Movie(
         id = id,
@@ -48,6 +53,9 @@ data class NewMovie(
         trailerUrl = trailerUrl,
         posterUrl = posterUrl,
         listIds = listIds,
-        createdAt = createdAt
+        createdAt = createdAt,
+        tmdbId = tmdbId,
+        tmdbMediaType = tmdbMediaType,
+        tmdbLookupAttempted = tmdbId != null
     )
 }

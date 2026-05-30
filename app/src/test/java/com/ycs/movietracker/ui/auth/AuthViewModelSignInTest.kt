@@ -11,6 +11,7 @@ import com.ycs.movietracker.data.model.MovieList
 import com.ycs.movietracker.data.repository.AuthRepository
 import com.ycs.movietracker.data.repository.MovieListRepository
 import com.ycs.movietracker.test.NoopMovieRepository
+import com.ycs.movietracker.util.AndroidStringProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -80,7 +81,7 @@ class AuthViewModelSignInTest {
             override suspend fun deleteAllLists(uid: String): Result<Unit> = Result.success(Unit)
         }
         val context = ApplicationProvider.getApplicationContext<Context>()
-        return AuthViewModel(context, fakeAuth, fakeLists, NoopMovieRepository())
+        return AuthViewModel(AndroidStringProvider(context), fakeAuth, fakeLists, NoopMovieRepository())
     }
 
     // ── Success ──────────────────────────────────────────────────────────────

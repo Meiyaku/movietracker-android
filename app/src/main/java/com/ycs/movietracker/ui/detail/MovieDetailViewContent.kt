@@ -25,6 +25,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material3.Icon
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -44,8 +46,13 @@ internal fun ViewModeContent(
     posterUrl: String?,
     isWatched: Boolean,
     rating: Double?,
-    listNames: List<String>,
-    onWatchTrailer: (String) -> Unit
+    onWatchTrailer: (String) -> Unit,
+    onWhereToWatch: () -> Unit,
+    tmdbId: Int? = null,
+    tmdbMediaType: String? = null,
+    isRedetectingMediaType: Boolean = false,
+    redetectMediaTypeError: String? = null,
+    onRedetectMediaType: () -> Unit = {}
 ) {
     if (!posterUrl.isNullOrEmpty()) {
         AsyncImage(
@@ -96,24 +103,22 @@ internal fun ViewModeContent(
         )
     }
 
-    Text(
-        text = "${stringResource(R.string.label_lists)}: ${listNames.joinToString(", ")}",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onBackground
-    )
-
-    if (!trailerUrl.isNullOrEmpty()) {
-        Button(
-            onClick = { onWatchTrailer(trailerUrl) },
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.appColors.authButton),
-            shape = RoundedCornerShape(8.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = stringResource(R.string.action_watch_trailer),
-                color = Color.White
-            )
-        }
+    Button(
+        onClick = onWhereToWatch,
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Icon(
+            imageVector = Icons.Default.Tv,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.padding(end = 8.dp)
+        )
+        Text(
+            text = stringResource(R.string.action_where_to_watch),
+            color = Color.White
+        )
     }
 
     if (!notes.isNullOrEmpty()) {
@@ -150,6 +155,47 @@ internal fun ViewModeContent(
                 text = description,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground
+            )
+        }
+    }
+
+    if (!trailerUrl.isNullOrEmpty()) {
+        Button(
+            onClick = { onWatchTrailer(trailerUrl) },
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.appColors.authButton),
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = stringResource(R.string.action_watch_trailer),
+                color = Color.White
+            )
+        }
+    }
+
+    if (tmdbId != null) {
+        androidx.compose.material3.HorizontalDivider(
+            modifier = Modifier.padding(vertical = 4.dp),
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
+        androidx.compose.material3.OutlinedButton(
+            onClick = onRedetectMediaType,
+            enabled = !isRedetectingMediaType,
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            val label = if (tmdbMediaType != null) {
+                stringResource(R.string.action_redetect_media_type_with_current, tmdbMediaType)
+            } else {
+                stringResource(R.string.action_detect_media_type)
+            }
+            Text(text = label, style = MaterialTheme.typography.bodyMedium)
+        }
+        if (redetectMediaTypeError != null) {
+            Text(
+                text = redetectMediaTypeError,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
             )
         }
     }

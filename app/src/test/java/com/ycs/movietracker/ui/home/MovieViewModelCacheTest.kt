@@ -9,6 +9,8 @@ import com.ycs.movietracker.data.model.MoviesPage
 import com.ycs.movietracker.data.model.NewMovie
 import com.ycs.movietracker.data.repository.MovieRepository
 import com.ycs.movietracker.data.repository.RemoteConfigRepository
+import com.ycs.movietracker.util.AndroidStringProvider
+import com.ycs.movietracker.util.NoOpSettingsRepository
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,7 +47,11 @@ class MovieViewModelCacheTest {
         override val maxRetryAttempts = 3
         override val isTmdbSearchEnabled = MutableStateFlow(true)
         override val tmdbApiKey = MutableStateFlow("")
+        override val whatsNew = MutableStateFlow("")
+        override val whatsNewVersion = MutableStateFlow(0)
     }
+
+    private val fakeSettings = NoOpSettingsRepository()
 
     @Before fun setUp() { Dispatchers.setMain(testDispatcher) }
     @After fun tearDown() { Dispatchers.resetMain() }
@@ -82,7 +88,7 @@ class MovieViewModelCacheTest {
     private fun movie(id: String) = Movie(id = id, title = id)
 
     private fun makeVm(repo: FakeRepo = FakeRepo(), cache: FakeCache = FakeCache()): MovieViewModel =
-        MovieViewModel(repo, context, fakeRemoteConfig, testDispatcher, cache)
+        MovieViewModel(repo, AndroidStringProvider(context), fakeRemoteConfig, fakeSettings, testDispatcher, cache)
 
     // ── seeding ───────────────────────────────────────────────────────────────
 
@@ -205,7 +211,7 @@ class MovieViewModelCacheTest {
         val cache = FakeCache()
         val vm = makeVm(repo = FakeRepo(), cache = cache)
         // Use the ViewModel but override the addMovie path via a fresh vm with failing repo
-        val vmFailing = MovieViewModel(failingRepo, context, fakeRemoteConfig, testDispatcher, cache)
+        val vmFailing = MovieViewModel(failingRepo, AndroidStringProvider(context), fakeRemoteConfig, fakeSettings, testDispatcher, cache)
         vmFailing.setSession("uid", "list1")
         vmFailing.addMovie(NewMovie(title = "New"))
         assertTrue("cache should not be invalidated on add failure", cache.invalidated.isEmpty())

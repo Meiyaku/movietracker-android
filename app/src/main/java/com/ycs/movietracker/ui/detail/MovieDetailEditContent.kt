@@ -152,7 +152,9 @@ internal fun EditModeContent(
                     posterUrl = result.posterUrl("w500") ?: "",
                     description = result.overview ?: "",
                     trailerUrl = if (draft.trailerUrl.isBlank() && trailerUrl != null)
-                        trailerUrl else draft.trailerUrl
+                        trailerUrl else draft.trailerUrl,
+                    tmdbId = result.id,
+                    tmdbMediaType = result.mediaType
                 ))
             }
         )

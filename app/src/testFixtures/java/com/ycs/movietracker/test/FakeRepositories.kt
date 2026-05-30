@@ -4,6 +4,7 @@ import com.ycs.movietracker.data.model.Movie
 import com.ycs.movietracker.data.model.MoviesPage
 import com.ycs.movietracker.data.model.NewMovie
 import com.ycs.movietracker.data.model.TmdbSearchResult
+import com.ycs.movietracker.data.model.TmdbWatchProviders
 import com.ycs.movietracker.data.repository.MovieRepository
 import com.ycs.movietracker.data.repository.TmdbRepository
 
@@ -60,4 +61,13 @@ class FakeTmdbRepository(
         lastTrailerId = id
         return trailerResult
     }
+
+    override suspend fun getWatchProviders(
+        id: Int,
+        mediaType: String,
+        region: String
+    ): Result<TmdbWatchProviders> = Result.success(TmdbWatchProviders())
+
+    override suspend fun lookupMediaType(id: Int, expectedTitle: String): Result<String?> =
+        Result.success(null)
 }

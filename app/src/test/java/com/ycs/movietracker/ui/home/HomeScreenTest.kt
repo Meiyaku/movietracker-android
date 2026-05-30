@@ -2,9 +2,11 @@ package com.ycs.movietracker.ui.home
 
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onFirst
@@ -31,10 +33,8 @@ import org.robolectric.annotation.Config
  *
  * Covers: empty states, loading indicator, movie card display and click,
  * FAB, search bar (placeholder, clear button), top-bar content (list name,
- * status summary, menu button), sort/filter dropdown, snackbar, and basic
- * drawer opening via the menu button.
- *
- * [AppDrawerContentTest] covers the drawer internals exhaustively.
+ * status summary, menu button), sort/filter dropdown, snackbar, and the
+ * navigation drawer (opening from the menu button, log out).
  *
  * Run with: ./gradlew test
  */
@@ -56,7 +56,6 @@ class HomeScreenTest {
 
     private fun setScreen(
         movies: List<Movie> = emptyList(),
-        lists: List<MovieList> = emptyList(),
         activeList: MovieList? = null,
         searchQuery: String = "",
         sortOrder: SortOrder = SortOrder.TITLE_ASC,
@@ -73,14 +72,12 @@ class HomeScreenTest {
         onAddMovieClick: () -> Unit = {},
         onLogOut: () -> Unit = {},
         onSettings: () -> Unit = {},
-        onListSelected: (MovieList) -> Unit = {},
         onSnackbarDismiss: () -> Unit = {}
     ) {
         composeTestRule.setContent {
             MovietrackerTheme {
                 HomeScreen(
                     movies = movies,
-                    lists = lists,
                     activeList = activeList,
                     searchQuery = searchQuery,
                     sortOrder = sortOrder,
@@ -97,7 +94,6 @@ class HomeScreenTest {
                     onAddMovieClick = onAddMovieClick,
                     onLogOut = onLogOut,
                     onSettings = onSettings,
-                    onListSelected = onListSelected,
                     onSnackbarDismiss = onSnackbarDismiss
                 )
             }
@@ -232,12 +228,6 @@ class HomeScreenTest {
     }
 
     @Test
-    fun topBar_menuButton_isDisplayed() {
-        setScreen()
-        composeTestRule.onNodeWithContentDescription("Open menu").assertIsDisplayed()
-    }
-
-    @Test
     fun topBar_statusSummary_showsWatchedAndWantCounts() {
         val movies = listOf(
             movie("A", status = WatchStatus.WATCHED),
@@ -327,36 +317,34 @@ class HomeScreenTest {
         composeTestRule.onNodeWithText("Something went wrong").assertIsDisplayed()
     }
 
-    // ── List selector ─────────────────────────────────────────────────────────
+    // ── Navigation drawer ─────────────────────────────────────────────────────
 
     @Test
-    fun menuButton_click_revealsListSelectorDialog() {
-        setScreen(lists = listOf(MovieList(id = "1", name = "All Movies")))
+    fun drawer_opensFromMenuButton_showsMenuItems() {
+        setScreen()
         composeTestRule.onNodeWithContentDescription("Open menu").performClick()
-        composeTestRule.onNodeWithText("MY LISTS").assertIsDisplayed()
+        composeTestRule.onNodeWithText("What's New").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Settings").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Log Out").assertIsDisplayed()
     }
 
     @Test
-    fun listSelector_listItem_click_invokesOnListSelected() {
-        val action = MovieList(id = "2", name = "Action")
-        var selected: MovieList? = null
-        setScreen(
-            lists = listOf(MovieList(id = "1", name = "All Movies"), action),
-            onListSelected = { selected = it }
-        )
+    fun drawer_settings_click_invokesOnSettings() {
+        var clicked = false
+        setScreen(onSettings = { clicked = true })
         composeTestRule.onNodeWithContentDescription("Open menu").performClick()
-        composeTestRule.onNodeWithText("Action").performClick()
-        assertEquals(action, selected)
+        composeTestRule.onNodeWithText("Settings").performClick()
+        assertTrue(clicked)
     }
 
     @Test
-    fun overflow_logOut_click_invokesOnLogOut() {
+    fun drawer_logOut_click_invokesOnLogOut() {
         var clicked = false
         setScreen(onLogOut = { clicked = true })
-        composeTestRule.onNodeWithContentDescription("More options").performClick()
+        composeTestRule.onNodeWithContentDescription("Open menu").performClick()
         composeTestRule.onNodeWithText("Log Out").performClick()
-        // Dropdown closes, confirmation dialog appears — click the Log Out button inside it
-        composeTestRule.onNodeWithText("Log Out").performClick()
+        // Confirmation dialog appears — click the Log Out button inside it
+        composeTestRule.onNode(hasText("Log Out") and hasAnyAncestor(isDialog())).performClick()
         assertTrue(clicked)
     }
 }

@@ -69,6 +69,21 @@ class FirebaseMovieRepository(
             moviesCollection(uid).document(movie.id).set(movieToMap(movie)).await()
         }
 
+    override suspend fun setTmdbLookupResult(
+        uid: String,
+        movieId: String,
+        tmdbId: Int?,
+        mediaType: String?
+    ): Result<Unit> =
+        firebaseCall("setTmdbLookupResult [uid=$uid, movieId=$movieId]") {
+            val updates = buildMap<String, Any?> {
+                put("tmdbLookupAttempted", true)
+                if (tmdbId != null) put("tmdbId", tmdbId.toLong())
+                if (mediaType != null) put("tmdbMediaType", mediaType)
+            }
+            moviesCollection(uid).document(movieId).update(updates).await()
+        }
+
     override suspend fun deleteMovie(uid: String, movieId: String): Result<Unit> =
         firebaseCall("deleteMovie [uid=$uid, movieId=$movieId]") {
             moviesCollection(uid).document(movieId).delete().await()
@@ -177,7 +192,10 @@ class FirebaseMovieRepository(
             trailerUrl = getString("trailerUrl"),
             posterUrl = getString("posterUrl"),
             listIds = (get("listIds") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
-            createdAt = getTimestamp("createdAt") ?: Timestamp.now()
+            createdAt = getTimestamp("createdAt") ?: Timestamp.now(),
+            tmdbId = (get("tmdbId") as? Long)?.toInt(),
+            tmdbMediaType = getString("tmdbMediaType"),
+            tmdbLookupAttempted = getBoolean("tmdbLookupAttempted") ?: false
         )
     }
 
@@ -204,7 +222,9 @@ class FirebaseMovieRepository(
             title = movie.title, year = movie.year, genre = movie.genre,
             status = movie.status, rating = movie.rating, description = movie.description,
             notes = movie.notes, trailerUrl = movie.trailerUrl, posterUrl = movie.posterUrl,
-            listIds = movie.listIds, createdAt = movie.createdAt
+            listIds = movie.listIds, createdAt = movie.createdAt,
+            tmdbId = movie.tmdbId, tmdbMediaType = movie.tmdbMediaType,
+            tmdbLookupAttempted = movie.tmdbId != null
         )
 
     private fun movieToMap(movie: Movie): Map<String, Any?> =
@@ -212,13 +232,16 @@ class FirebaseMovieRepository(
             title = movie.title, year = movie.year, genre = movie.genre,
             status = movie.status, rating = movie.rating, description = movie.description,
             notes = movie.notes, trailerUrl = movie.trailerUrl, posterUrl = movie.posterUrl,
-            listIds = movie.listIds, createdAt = movie.createdAt
+            listIds = movie.listIds, createdAt = movie.createdAt,
+            tmdbId = movie.tmdbId, tmdbMediaType = movie.tmdbMediaType,
+            tmdbLookupAttempted = movie.tmdbLookupAttempted
         )
 
     private fun movieFieldsToMap(
         title: String, year: Int?, genre: String?, status: com.ycs.movietracker.data.model.WatchStatus,
         rating: Double?, description: String?, notes: String?, trailerUrl: String?,
-        posterUrl: String?, listIds: List<String>, createdAt: com.google.firebase.Timestamp
+        posterUrl: String?, listIds: List<String>, createdAt: com.google.firebase.Timestamp,
+        tmdbId: Int?, tmdbMediaType: String?, tmdbLookupAttempted: Boolean
     ): Map<String, Any?> = mapOf(
         "title" to title,
         "year" to year,
@@ -231,7 +254,10 @@ class FirebaseMovieRepository(
         "posterUrl" to posterUrl,
         "listIds" to listIds,
         "createdAt" to createdAt,
-        "dedupeKey" to buildDedupeKey(title, year, genre)
+        "dedupeKey" to buildDedupeKey(title, year, genre),
+        "tmdbId" to tmdbId?.toLong(),
+        "tmdbMediaType" to tmdbMediaType,
+        "tmdbLookupAttempted" to tmdbLookupAttempted
     )
 
     /**

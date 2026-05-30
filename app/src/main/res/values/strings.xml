@@ -29,11 +29,9 @@
     <!-- Home screen -->
     <string name="app_bar_title">My Movie Tracker</string>
     <string name="cd_open_menu">Open menu</string>
-    <string name="cd_more_options">More options</string>
-    <string name="cd_close_dialog">Close</string>
-    <string name="cd_current_list">Current list</string>
     <string name="cd_tv_show">TV show</string>
     <string name="hint_search_movies">Search movies &amp; shows…</string>
+    <string name="hint_search_lists">Search lists…</string>
     <string name="cd_sort_filter">Sort / filter</string>
     <string name="cd_add_movie">Add movie</string>
     <string name="cd_movie_poster">Movie poster for %1$s</string>
@@ -46,10 +44,13 @@
     <string name="cd_back">Back</string>
     <string name="action_edit">Edit</string>
     <string name="action_watch_trailer">Watch Trailer</string>
+    <string name="action_where_to_watch">Where to Watch</string>
+    <string name="action_migrate_data">Migrate Data</string>
+    <string name="action_redetect_media_type_with_current">Re-detect media type (currently %1$s)</string>
+    <string name="action_detect_media_type">Detect media type</string>
     <string name="placeholder_title">Title</string>
     <string name="placeholder_year">Year</string>
     <string name="placeholder_genre">Genre</string>
-    <string name="placeholder_list">List</string>
     <string name="placeholder_trailer">Trailer URL</string>
     <string name="placeholder_notes">Notes</string>
     <string name="status_watched">Watched</string>
@@ -64,19 +65,12 @@
     <string name="action_search_tmdb">Search TMDB</string>
     <string name="cd_movie_poster_generic">Movie poster</string>
     <string name="placeholder_description_tmdb">Auto-filled from TMDB search</string>
-    <plurals name="cd_star_button">
-        <item quantity="one">%1$d star</item>
-        <item quantity="other">%1$d stars</item>
-    </plurals>
     <string name="empty_no_movies_search">No movies match your search.</string>
     <string name="empty_tmdb_no_results">No results found on TMDB for \"%1$s\".</string>
 
     <!-- Movie Detail screen – edit mode -->
     <string name="cd_cancel_edit">Cancel edit</string>
     <string name="cd_delete_movie">Delete movie</string>
-    <string name="error_save_movie_failed">Failed to save movie. Please try again.</string>
-    <string name="error_delete_movie_failed">Failed to delete movie. Please try again.</string>
-    <string name="error_duplicate_movie">A movie with this title, year, and genre already exists.</string>
     <string name="dialog_title_delete_movie">Delete movie?</string>
     <string name="dialog_msg_delete_movie">Delete \'%1$s\'? This cannot be undone.</string>
     <string name="dialog_title_duplicate_movie">Duplicate Movie</string>
@@ -85,12 +79,13 @@
     <string name="cd_share_movie">Share movie</string>
 
     <!-- Navigation drawer -->
-    <string name="cd_close_menu">Close menu</string>
     <string name="action_log_out">Log Out</string>
     <string name="action_settings">Settings</string>
-    <string name="action_create_list">Create List</string>
+    <string name="action_whats_new">What\'s New</string>
+    <string name="whats_new_empty">No release notes available.</string>
+    <string name="migration_in_progress">Migrating data…</string>
+    <string name="action_close">Close</string>
     <string name="label_my_lists">MY LISTS</string>
-    <string name="action_new_list">New List</string>
 
     <!-- Create list dialog -->
     <string name="title_new_list">New List</string>
@@ -105,11 +100,8 @@
     <string name="title_rename_list">Rename List</string>
     <string name="title_edit_list">Edit List</string>
     <string name="action_save">Save</string>
-    <string name="cd_rename_list">Rename list</string>
-    <string name="cd_edit_list">Edit list</string>
     <string name="label_list_subtitle">Subtitle (optional)</string>
     <string name="label_list_description">Description (optional)</string>
-    <string name="error_rename_list_failed">Failed to rename list. Please try again.</string>
     <string name="error_edit_list_failed">Failed to update list. Please try again.</string>
 
     <!-- Settings screen -->
@@ -118,6 +110,9 @@
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
     <string name="theme_system">Follow Device Settings</string>
+    <string name="title_main_screen">Start Up Main Screen</string>
+    <string name="main_screen_movies">Movies &amp; TV Shows</string>
+    <string name="main_screen_my_lists">My Lists</string>
     <string name="title_about">About</string>
     <string name="label_version">Version</string>
     <string name="label_tmdb_link">Data from The Movie Database</string>
@@ -182,6 +177,5 @@
     <string name="title_delete_list">Delete list?</string>
     <string name="msg_delete_list_confirm">Delete \'%1$s\'? Movies in this list will remain in All Movies and any other lists they\'re assigned to.</string>
     <string name="action_delete">Delete</string>
-    <string name="cd_delete_list">Delete list</string>
     <string name="error_delete_list_failed">Failed to delete list. Please try again.</string>
 </resources>

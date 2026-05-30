@@ -6,7 +6,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
+import com.ycs.movietracker.navigation.popBackStackIfResumed
 import com.ycs.movietracker.ui.auth.AuthViewModel
 import com.ycs.movietracker.ui.home.MovieListViewModel
 import com.ycs.movietracker.ui.home.MovieViewModel
@@ -18,7 +20,8 @@ fun DetailRoute(
     authViewModel: AuthViewModel,
     movieListViewModel: MovieListViewModel,
     movieViewModel: MovieViewModel,
-    navController: NavHostController
+    navController: NavHostController,
+    navEntry: NavBackStackEntry
 ) {
     val currentUser by authViewModel.authState.collectAsState()
     val uid = currentUser?.uid.orEmpty()
@@ -66,15 +69,15 @@ fun DetailRoute(
         viewModel = detailViewModel,
         allLists = lists,
         initialTmdbQuery = initialTmdbQuery,
-        onBack = { navController.popBackStack() },
+        onBack = { navController.popBackStackIfResumed(navEntry) },
         onDeleted = {
             movieViewModel.notifyMovieRemoved(movieId)
             movieViewModel.showDeletedToast()
-            navController.popBackStack()
+            navController.popBackStackIfResumed(navEntry)
         },
         onSaved = {
             movieViewModel.setSearchQuery("")
-            navController.popBackStack()
+            navController.popBackStackIfResumed(navEntry)
         }
     )
 }

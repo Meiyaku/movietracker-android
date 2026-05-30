@@ -7,12 +7,15 @@ import com.ycs.movietracker.data.model.NewMovie
 import com.ycs.movietracker.data.model.SortOrder
 import com.ycs.movietracker.data.model.WatchFilter
 import com.ycs.movietracker.data.model.WatchStatus
-import android.content.Context
 import com.ycs.movietracker.data.cache.MovieCacheService
 import com.ycs.movietracker.data.cache.NoOpMovieCacheService
 import com.ycs.movietracker.data.repository.MovieRepository
 import com.ycs.movietracker.data.repository.RemoteConfigRepository
+import com.ycs.movietracker.data.repository.SettingsRepository
+import com.ycs.movietracker.data.service.TmdbAutoMatchResult
+import com.ycs.movietracker.data.service.TmdbBackfillService
 import com.ycs.movietracker.util.AppConfig
+import com.ycs.movietracker.util.StringProvider
 import com.ycs.movietracker.util.toUserMessage
 import timber.log.Timber
 import kotlinx.coroutines.CoroutineDispatcher
@@ -25,15 +28,19 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+@OptIn(kotlinx.coroutines.FlowPreview::class)
 class MovieViewModel(
     private val movieRepository: MovieRepository,
-    private val context: Context,
+    private val strings: StringProvider,
     private val remoteConfigRepository: RemoteConfigRepository,
+    private val settingsRepository: SettingsRepository,
     private val computationDispatcher: CoroutineDispatcher,
-    private val cache: MovieCacheService = NoOpMovieCacheService
+    private val cache: MovieCacheService = NoOpMovieCacheService,
+    private val tmdbBackfill: TmdbBackfillService? = null
 ) : ViewModel() {
 
     private val _uid = MutableStateFlow<String?>(null)
@@ -47,6 +54,29 @@ class MovieViewModel(
     val searchQuery = MutableStateFlow("")
     val sortOrder = MutableStateFlow(SortOrder.TITLE_ASC)
     val watchFilter = MutableStateFlow(WatchFilter.ALL)
+
+    val whatsNew: StateFlow<String> = remoteConfigRepository.whatsNew
+
+    private val _showWhatsNewAuto = MutableStateFlow(false)
+    val showWhatsNewAuto: StateFlow<Boolean> = _showWhatsNewAuto.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            remoteConfigRepository.whatsNewVersion.collect { remoteVersion ->
+                val lastSeen = settingsRepository.getLastSeenWhatsNewVersion()
+                if (lastSeen == null) {
+                    settingsRepository.setLastSeenWhatsNewVersion(remoteVersion)
+                } else if (remoteVersion > lastSeen) {
+                    _showWhatsNewAuto.value = true
+                    settingsRepository.setLastSeenWhatsNewVersion(remoteVersion)
+                }
+            }
+        }
+    }
+
+    fun dismissWhatsNewAuto() {
+        _showWhatsNewAuto.value = false
+    }
 
     val snackbarMessage = MutableStateFlow<String?>(null)
 
@@ -108,13 +138,14 @@ class MovieViewModel(
                     }
                 }
         }
+
         // If the initial load fails (no movies yet) surface a retry UI; otherwise use snackbar.
         viewModelScope.launch {
             pager.errors.collect { error ->
                 if (pager.movies.value.isEmpty()) {
-                    _homeLoadError.value = error.toUserMessage(context)
+                    _homeLoadError.value = error.toUserMessage(strings)
                 } else {
-                    snackbarMessage.value = error.toUserMessage(context)
+                    snackbarMessage.value = error.toUserMessage(strings)
                 }
             }
         }
@@ -155,7 +186,7 @@ class MovieViewModel(
                 }
                 .onFailure {
                     Timber.e(it, "addMovie failed")
-                    snackbarMessage.value = it.toUserMessage(context)
+                    snackbarMessage.value = it.toUserMessage(strings)
                 }
         }
     }
@@ -166,11 +197,11 @@ class MovieViewModel(
             movieRepository.updateMovie(uid, movie)
                 .onSuccess {
                     _activeListId.value?.let { cache.invalidate(uid, it) }
-                    pager.notifyUpdated(movie)
+                    applyUpdateToPager(movie)
                 }
                 .onFailure {
                     Timber.e(it, "updateMovie failed [movieId=${movie.id}]")
-                    snackbarMessage.value = it.toUserMessage(context)
+                    snackbarMessage.value = it.toUserMessage(strings)
                 }
         }
     }
@@ -185,7 +216,7 @@ class MovieViewModel(
                 }
                 .onFailure {
                     Timber.e(it, "deleteMovie failed [movieId=$movieId]")
-                    snackbarMessage.value = it.toUserMessage(context)
+                    snackbarMessage.value = it.toUserMessage(strings)
                 }
         }
     }
@@ -197,7 +228,20 @@ class MovieViewModel(
 
     fun notifyMovieUpdated(movie: Movie) {
         _uid.value?.let { uid -> _activeListId.value?.let { cache.invalidate(uid, it) } }
-        pager.notifyUpdated(movie)
+        applyUpdateToPager(movie)
+    }
+
+    /**
+     * Reflects a saved edit in the displayed list: if the edit removed the movie from the
+     * list currently being viewed, drop it; otherwise replace it in place.
+     */
+    private fun applyUpdateToPager(movie: Movie) {
+        val listId = _activeListId.value
+        if (listId != null && listId !in movie.listIds) {
+            pager.notifyRemoved(movie.id)
+        } else {
+            pager.notifyUpdated(movie)
+        }
     }
 
     fun notifyMovieRemoved(movieId: String) {
@@ -218,6 +262,99 @@ class MovieViewModel(
     }
 
     fun clearSnackbarMessage() { snackbarMessage.value = null }
+
+    val needsTmdbMigration: StateFlow<Boolean> = pager.movies
+        .map { movies ->
+            movies.any { movie ->
+                (movie.tmdbId == null && !movie.tmdbLookupAttempted) ||
+                    (movie.tmdbId != null && movie.tmdbMediaType == null)
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private val _isMigratingTmdb = MutableStateFlow(false)
+    val isMigratingTmdb: StateFlow<Boolean> = _isMigratingTmdb.asStateFlow()
+
+    /** Queue of movies that auto-match couldn't resolve. UI shows a picker for the first entry. */
+    private val _migrationQueue = MutableStateFlow<List<Movie>>(emptyList())
+    val migrationQueue: StateFlow<List<Movie>> = _migrationQueue.asStateFlow()
+
+    val currentMigrationCandidate: StateFlow<Movie?> = _migrationQueue
+        .map { it.firstOrNull() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    fun migrateTmdbIds() {
+        val service = tmdbBackfill ?: return
+        val uid = _uid.value ?: return
+        if (_isMigratingTmdb.value) return
+        val movies = pager.movies.value
+        val needLookup = movies.filter { it.tmdbId == null && !it.tmdbLookupAttempted }
+        val needMediaType = movies.filter { it.tmdbId != null && it.tmdbMediaType == null }
+        if (needLookup.isEmpty() && needMediaType.isEmpty()) return
+        _isMigratingTmdb.value = true
+        viewModelScope.launch {
+            try {
+                // Movies with tmdbId but no mediaType: probe TMDB to determine the correct type.
+                // Skip movies the probe can't resolve so we retry on next migration.
+                for (movie in needMediaType) {
+                    val tmdbId = movie.tmdbId ?: continue
+                    val resolved = service.resolveMediaType(tmdbId, movie.title) ?: continue
+                    movieRepository.setTmdbLookupResult(uid, movie.id, tmdbId, resolved)
+                        .onFailure { Timber.w(it, "tmdb migrate: mediaType persist failed") }
+                }
+                val unmatched = mutableListOf<Movie>()
+                for (movie in needLookup) {
+                    when (val result = service.autoMatch(movie)) {
+                        is TmdbAutoMatchResult.Matched ->
+                            movieRepository.setTmdbLookupResult(
+                                uid, movie.id, result.tmdbId, result.mediaType
+                            ).onFailure { Timber.w(it, "tmdb migrate: persist failed") }
+                        TmdbAutoMatchResult.Unmatched -> unmatched.add(movie)
+                        TmdbAutoMatchResult.Error -> { /* retry next migration */ }
+                    }
+                }
+                _migrationQueue.value = unmatched
+                if (unmatched.isEmpty()) refreshAfterMigration()
+            } finally {
+                _isMigratingTmdb.value = false
+            }
+        }
+    }
+
+    /** User picked a TMDB result for the front-of-queue movie. Persist and advance. */
+    fun confirmMigrationMatch(tmdbId: Int, mediaType: String) {
+        val uid = _uid.value ?: return
+        val movie = _migrationQueue.value.firstOrNull() ?: return
+        viewModelScope.launch {
+            movieRepository.setTmdbLookupResult(uid, movie.id, tmdbId, mediaType)
+                .onFailure { Timber.w(it, "tmdb migrate: confirm persist failed") }
+            advanceMigrationQueue()
+        }
+    }
+
+    /** User skipped the front-of-queue movie. Mark attempted so we never ask again. */
+    fun skipMigrationMatch() {
+        val uid = _uid.value ?: return
+        val movie = _migrationQueue.value.firstOrNull() ?: return
+        viewModelScope.launch {
+            movieRepository.setTmdbLookupResult(uid, movie.id, null, null)
+                .onFailure { Timber.w(it, "tmdb migrate: skip persist failed") }
+            advanceMigrationQueue()
+        }
+    }
+
+    private suspend fun advanceMigrationQueue() {
+        _migrationQueue.value = _migrationQueue.value.drop(1)
+        if (_migrationQueue.value.isEmpty()) refreshAfterMigration()
+    }
+
+    private fun refreshAfterMigration() {
+        val uid = _uid.value ?: return
+        val listId = _activeListId.value ?: return
+        cache.invalidate(uid, listId)
+        pager.reset(remoteConfigRepository.pageSize)
+        pager.loadFirstPage(uid, listId)
+    }
 }
 
 private fun <T : Comparable<T>> List<Movie>.sortWithNullsLast(

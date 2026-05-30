@@ -4,11 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ycs.movietracker.data.model.MovieList
 import com.ycs.movietracker.data.repository.MovieListRepository
-import android.content.Context
 import com.ycs.movietracker.R
 import com.ycs.movietracker.data.repository.MovieRepository
 import com.ycs.movietracker.util.AppConfig
 import com.ycs.movietracker.util.ConnectivityMonitor
+import com.ycs.movietracker.util.StringProvider
 import com.ycs.movietracker.util.toUserMessage
 import timber.log.Timber
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
 class MovieListViewModel(
     private val listRepository: MovieListRepository,
     private val movieRepository: MovieRepository,
-    private val context: Context,
+    private val strings: StringProvider,
     private val connectivityMonitor: ConnectivityMonitor
 ) : ViewModel() {
 
@@ -38,6 +38,9 @@ class MovieListViewModel(
 
     private val _isLoadingLists = MutableStateFlow(false)
     val isLoadingLists: StateFlow<Boolean> = _isLoadingLists.asStateFlow()
+
+    private val _movieCounts = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val movieCounts: StateFlow<Map<String, Int>> = _movieCounts.asStateFlow()
 
     private val _listLoadError = MutableStateFlow<String?>(null)
     val listLoadError: StateFlow<String?> = _listLoadError.asStateFlow()
@@ -64,7 +67,7 @@ class MovieListViewModel(
                 }
                 result.onFailure { error ->
                     Timber.e(error, "loadLists failed [uid=$uid]")
-                    _listLoadError.value = error.toUserMessage(context)
+                    _listLoadError.value = error.toUserMessage(strings)
                 }
             }
     }
@@ -103,18 +106,32 @@ class MovieListViewModel(
         _activeList.value = list
     }
 
+    /** Fetches the movie count for each list. Used by the My Lists screen. */
+    fun loadMovieCounts(uid: String) {
+        if (uid.isBlank()) return
+        val currentLists = _lists.value
+        viewModelScope.launch {
+            val counts = mutableMapOf<String, Int>()
+            for (list in currentLists) {
+                val result = movieRepository.getMoviesPage(uid, list.id, MOVIE_COUNT_PAGE_SIZE, null)
+                counts[list.id] = result.getOrNull()?.movies?.size ?: 0
+            }
+            _movieCounts.value = counts
+        }
+    }
+
     fun createList(name: String, subtitle: String?, description: String?, uid: String) {
         val trimmedName = name.trim()
         if (!connectivityMonitor.isOnline) {
-            _createState.value = ListMutationState.Error(context.getString(R.string.error_offline))
+            _createState.value = ListMutationState.Error(strings.get(R.string.error_offline))
             return
         }
         if (trimmedName.length > AppConfig.MAX_LIST_NAME_LENGTH) {
-            _createState.value = ListMutationState.Error(context.getString(R.string.error_list_name_too_long))
+            _createState.value = ListMutationState.Error(strings.get(R.string.error_list_name_too_long))
             return
         }
         if (_lists.value.any { it.name.trim().equals(trimmedName, ignoreCase = true) }) {
-            _createState.value = ListMutationState.Error(context.getString(R.string.error_duplicate_list_name))
+            _createState.value = ListMutationState.Error(strings.get(R.string.error_duplicate_list_name))
             return
         }
         viewModelScope.launch {
@@ -127,7 +144,7 @@ class MovieListViewModel(
             }
             result.onFailure {
                 Timber.e(it, "createList failed [uid=$uid, name=$trimmedName]")
-                _createState.value = ListMutationState.Error(context.getString(R.string.error_create_list_failed))
+                _createState.value = ListMutationState.Error(strings.get(R.string.error_create_list_failed))
             }
         }
     }
@@ -137,18 +154,18 @@ class MovieListViewModel(
     fun editList(list: MovieList, name: String, subtitle: String?, description: String?, uid: String) {
         val trimmedName = name.trim()
         if (!connectivityMonitor.isOnline) {
-            _editState.value = ListMutationState.Error(context.getString(R.string.error_offline))
+            _editState.value = ListMutationState.Error(strings.get(R.string.error_offline))
             return
         }
         if (trimmedName.length > AppConfig.MAX_LIST_NAME_LENGTH) {
-            _editState.value = ListMutationState.Error(context.getString(R.string.error_list_name_too_long))
+            _editState.value = ListMutationState.Error(strings.get(R.string.error_list_name_too_long))
             return
         }
         val isDuplicate = _lists.value.any {
             it.id != list.id && it.name.trim().equals(trimmedName, ignoreCase = true)
         }
         if (isDuplicate) {
-            _editState.value = ListMutationState.Error(context.getString(R.string.error_duplicate_list_name))
+            _editState.value = ListMutationState.Error(strings.get(R.string.error_duplicate_list_name))
             return
         }
         viewModelScope.launch {
@@ -163,7 +180,7 @@ class MovieListViewModel(
             }
             result.onFailure {
                 Timber.e(it, "editList failed [uid=$uid, listId=${list.id}]")
-                _editState.value = ListMutationState.Error(context.getString(R.string.error_edit_list_failed))
+                _editState.value = ListMutationState.Error(strings.get(R.string.error_edit_list_failed))
             }
         }
     }
@@ -172,7 +189,7 @@ class MovieListViewModel(
 
     fun deleteList(list: MovieList, uid: String) {
         if (!connectivityMonitor.isOnline) {
-            _deleteState.value = ListMutationState.Error(context.getString(R.string.error_offline))
+            _deleteState.value = ListMutationState.Error(strings.get(R.string.error_offline))
             return
         }
         viewModelScope.launch {
@@ -181,7 +198,7 @@ class MovieListViewModel(
             val removeResult = movieRepository.removeListFromMovies(uid, list.id)
             if (removeResult.isFailure) {
                 Timber.e(removeResult.exceptionOrNull(), "removeListFromMovies failed [uid=$uid, listId=${list.id}]")
-                _deleteState.value = ListMutationState.Error(context.getString(R.string.error_delete_list_failed))
+                _deleteState.value = ListMutationState.Error(strings.get(R.string.error_delete_list_failed))
                 return@launch
             }
 
@@ -197,7 +214,7 @@ class MovieListViewModel(
             }
             deleteResult.onFailure {
                 Timber.e(it, "deleteList failed [uid=$uid, listId=${list.id}]")
-                _deleteState.value = ListMutationState.Error(context.getString(R.string.error_delete_list_failed))
+                _deleteState.value = ListMutationState.Error(strings.get(R.string.error_delete_list_failed))
             }
         }
     }
@@ -205,6 +222,9 @@ class MovieListViewModel(
     fun resetDeleteState() { _deleteState.value = ListMutationState.Idle }
 
     companion object {
+        /** Upper bound for counting movies in a list — far above any realistic personal library. */
+        private const val MOVIE_COUNT_PAGE_SIZE = 1000
+
         /**
          * Returns [lists] with MovieList.DEFAULT_LIST_NAME pinned at position 0 and all other lists
          * sorted A–Z case-insensitively. MovieList.DEFAULT_LIST_NAME is the default list created for every

@@ -1,15 +1,14 @@
 package com.ycs.movietracker.util
 
-import android.content.Context
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.ycs.movietracker.R
 
-fun Throwable.toUserMessage(context: Context): String = when {
+fun Throwable.toUserMessage(strings: StringProvider): String = when {
     this is FirebaseFirestoreException && code == FirebaseFirestoreException.Code.UNAVAILABLE ->
-        context.getString(R.string.error_offline)
+        strings.get(R.string.error_offline)
     this is FirebaseFirestoreException && code == FirebaseFirestoreException.Code.PERMISSION_DENIED ->
-        context.getString(R.string.error_permission_denied)
-    else -> message?.takeIf { it.isNotBlank() } ?: context.getString(R.string.error_generic)
+        strings.get(R.string.error_permission_denied)
+    else -> message?.takeIf { it.isNotBlank() } ?: strings.get(R.string.error_generic)
 }
 
 fun Throwable.isRetryable(): Boolean =

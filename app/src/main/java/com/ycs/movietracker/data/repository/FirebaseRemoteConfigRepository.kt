@@ -13,6 +13,8 @@ class FirebaseRemoteConfigRepository(
 
     private val _isTmdbSearchEnabled = MutableStateFlow(true)
     private val _tmdbApiKey = MutableStateFlow("")
+    private val _whatsNew = MutableStateFlow("")
+    private val _whatsNewVersion = MutableStateFlow(0)
 
     init {
         remoteConfig.setDefaultsAsync(R.xml.remote_config_defaults)
@@ -21,12 +23,16 @@ class FirebaseRemoteConfigRepository(
                 // uninitialised values.
                 _isTmdbSearchEnabled.value = remoteConfig.getBoolean(KEY_TMDB_SEARCH_ENABLED)
                 _tmdbApiKey.value = remoteConfig.getString(KEY_TMDB_API_KEY)
+                _whatsNew.value = remoteConfig.getString(KEY_WHATS_NEW)
+                _whatsNewVersion.value = remoteConfig.getLong(KEY_WHATS_NEW_VERSION).toInt()
 
                 remoteConfig.fetchAndActivate()
                     .addOnSuccessListener { activated ->
                         Timber.d("Remote config fetchAndActivate: activated=$activated")
                         _isTmdbSearchEnabled.value = remoteConfig.getBoolean(KEY_TMDB_SEARCH_ENABLED)
                         _tmdbApiKey.value = remoteConfig.getString(KEY_TMDB_API_KEY)
+                        _whatsNew.value = remoteConfig.getString(KEY_WHATS_NEW)
+                        _whatsNewVersion.value = remoteConfig.getLong(KEY_WHATS_NEW_VERSION).toInt()
                     }
                     .addOnFailureListener { e ->
                         Timber.w(e, "Remote config fetch failed — using defaults/cached values")
@@ -47,10 +53,16 @@ class FirebaseRemoteConfigRepository(
 
     override val tmdbApiKey: StateFlow<String> = _tmdbApiKey
 
+    override val whatsNew: StateFlow<String> = _whatsNew
+
+    override val whatsNewVersion: StateFlow<Int> = _whatsNewVersion
+
     companion object {
         const val KEY_PAGE_SIZE = "page_size"
         const val KEY_MAX_RETRY_ATTEMPTS = "max_retry_attempts"
         const val KEY_TMDB_SEARCH_ENABLED = "tmdb_search_enabled"
         const val KEY_TMDB_API_KEY = "tmdb_api_key"
+        const val KEY_WHATS_NEW = "whats_new"
+        const val KEY_WHATS_NEW_VERSION = "whats_new_version"
     }
 }

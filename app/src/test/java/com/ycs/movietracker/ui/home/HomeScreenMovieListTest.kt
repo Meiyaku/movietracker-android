@@ -21,7 +21,9 @@ import org.robolectric.annotation.Config
  * Run with: ./gradlew test
  */
 @RunWith(AndroidJUnit4::class)
-@Config(sdk = [33])
+// Pin a realistic phone screen size: the adaptive movie grid needs a true device width to
+// resolve to 2 columns — Robolectric's default display is too narrow and collapses it to 1.
+@Config(sdk = [33], qualifiers = "+w411dp-h891dp")
 class HomeScreenMovieListTest {
 
     @get:Rule

@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.flow.drop
+import com.ycs.movietracker.data.model.MainScreen
 import com.ycs.movietracker.data.model.ThemeMode
 import com.ycs.movietracker.navigation.AppRoute
 import com.ycs.movietracker.navigation.NavGraph
@@ -29,6 +30,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val themeMode by settingsViewModel.themeMode.collectAsState()
+            val mainScreen by settingsViewModel.mainScreen.collectAsState()
             val systemDark = isSystemInDarkTheme()
             val darkTheme = when (themeMode) {
                 ThemeMode.LIGHT -> false
@@ -39,13 +41,17 @@ class MainActivity : ComponentActivity() {
             MovietrackerTheme(darkTheme = darkTheme) {
                 val authState by authViewModel.authState.collectAsState()
                 val navController = rememberNavController()
-                val startDestination: AppRoute = if (authState != null) AppRoute.Home else AppRoute.Auth
+                val mainRoute: AppRoute = when (mainScreen) {
+                    MainScreen.MOVIES -> AppRoute.Home()
+                    MainScreen.MY_LISTS -> AppRoute.MyLists
+                }
+                val startDestination: AppRoute = if (authState != null) mainRoute else AppRoute.Auth
 
                 LaunchedEffect(Unit) {
-                    snapshotFlow { authState }
+                    snapshotFlow { authState to mainRoute }
                         .drop(1)
-                        .collect { user ->
-                            navController.navigate(if (user != null) AppRoute.Home else AppRoute.Auth) {
+                        .collect { (user, target) ->
+                            navController.navigate(if (user != null) target else AppRoute.Auth) {
                                 popUpTo(0) { inclusive = true }
                                 launchSingleTop = true
                             }

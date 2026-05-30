@@ -13,6 +13,7 @@ import com.ycs.movietracker.data.model.NewMovie
 import com.ycs.movietracker.data.repository.AuthRepository
 import com.ycs.movietracker.data.repository.MovieListRepository
 import com.ycs.movietracker.data.repository.MovieRepository
+import com.ycs.movietracker.util.AndroidStringProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -108,7 +109,7 @@ class AuthViewModelDeleteAccountTest {
                 Result.success(MoviesPage(emptyList(), null, false))
         }
         val context = ApplicationProvider.getApplicationContext<Context>()
-        return AuthViewModel(context, fakeAuth, fakeLists, fakeMovies)
+        return AuthViewModel(AndroidStringProvider(context), fakeAuth, fakeLists, fakeMovies)
     }
 
     // ── No current user ───────────────────────────────────────────────────────

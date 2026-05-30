@@ -16,4 +16,12 @@
         <key>tmdb_api_key</key>
         <value></value>
     </entry>
+    <entry>
+        <key>whats_new</key>
+        <value></value>
+    </entry>
+    <entry>
+        <key>whats_new_version</key>
+        <value>0</value>
+    </entry>
 </defaultsMap>
